@@ -1,0 +1,336 @@
+/*
+  Inter font from Google Fonts
+  - Supports variable font weights and font display swapping
+  - See https://fonts.google.com/specimen/Inter
+*/
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap');
+
+
+body { font-family: 'Inter', sans-serif; cursor: default; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #1f2937; }
+::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+#originalCanvas, #processedImageCanvas, #paintCanvas, #paintSpheroidCanvas, #manualPaintCanvas { display: none; }
+
+.loader { border: 4px solid #4b5563; border-top: 4px solid #2dd4bf; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; background: #374151; border-radius: 5px; outline: none; transition: opacity .2s; }
+input[type="range"]:hover { opacity: 1; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; background: #2dd4bf; cursor: pointer; border-radius: 50%; border: 2px solid #111827; }
+input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; background: #2dd4bf; cursor: pointer; border-radius: 50%; border: 2px solid #111827; }
+
+#canvas-container { background-color: #030712; background-image: radial-gradient(#1f2937 1px, transparent 1px); background-size: 20px 20px; }
+#resultCanvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; cursor: grab; touch-action: none; }
+
+.manual-button.active, .popup-button.active, #header-project-btn.active, #header-analysis-btn.active, #header-adjustments-btn.active, #header-options-btn.active, #header-shortcuts-btn.active, #fullscreen-icon-bar button.active, #fullscreen-cell-controls button.active, #floating-cell-counter button.active { background-color: #2dd4bf; color: #111827; font-weight: bold; box-shadow: 0 0 15px rgba(45, 212, 191, 0.5); }
+.shortcut-key { background-color: #374151; border: 1px solid #6b7280; border-radius: 4px; padding: 2px 6px; font-size: 0.75em; font-weight: 600; margin-left: auto; box-shadow: inset 0 -2px 0 #1f2937; }
+
+.popup-header, .icon-bar-drag-handle { cursor: move; }
+.resize-handle { position: absolute; bottom: 0; right: 0; width: 16px; height: 16px; cursor: se-resize; background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M16 0V16L0 16' stroke='%236b7280' stroke-width='2'/%3E%3C/svg%3E%0A"); }
+
+.fullscreen-active #creator-footer { display: none; }
+
+/* Estilos para subseções recolhíveis */
+.subsection-details { background: rgba(17, 24, 39, 0.5); border-radius: 0.5rem; border: 1px solid #374151; margin-bottom: 0.5rem; }
+.subsection-details summary { padding: 0.5rem 0.75rem; font-size: 1em; line-height: 1; font-weight: 600; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+.subsection-details summary .font-semibold { margin: 0; }
+.subsection-details summary::after { content: '›'; font-size: 1.5rem; transition: transform 0.2s; color: #6b7280; line-height: 1; }
+.subsection-details[open] > summary::after { transform: rotate(90deg); }
+.subsection-content { padding: 0 0.75rem 0.75rem 0.75rem; }
+
+
+#cumulativeResultTableContainer table { min-width: 1200px; }
+
+.resizable-panel { min-width: 280px; min-height: 150px; overflow: hidden; display: flex; flex-direction: column; }
+
+#toast-notification {
+    transition: opacity 0.5s, transform 0.5s;
+}
+#toast-notification.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+#floating-cell-counter {
+    top: 1rem;
+    right: 4.5rem; /* Position it next to the other floating controls */
+}
+
+main.dragging {
+    outline: 4px dashed #2dd4bf;
+    outline-offset: -8px;
+}
+
+#shortcuts-list .shortcut-item {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+#shortcuts-list .shortcut-key-display.listening {
+    border-color: #2dd4bf;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.4); }
+    50% { box-shadow: 0 0 0 4px rgba(45, 212, 191, 0); }
+}
+
+/* Tab Styles */
+#tabs-container { scrollbar-width: thin; scrollbar-color: #4b5563 #1f2937; }
+.tab-item { transition: background-color 0.2s, color 0.2s, border-color 0.2s; min-width: 120px; max-width: 220px; }
+.tab-item.active { background-color: #111827; border-color: #2dd4bf; color: #f0fdfa; }
+.tab-item.drag-over { background-color: #374151; }
+.tab-close-btn { opacity: 0.5; transition: opacity 0.2s; }
+.tab-item:hover .tab-close-btn { opacity: 1; }
+
+/* Sticker Styles */
+.sticker-panel {
+    position: absolute;
+    border: 1px solid #4b5563;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 150px;
+    min-height: 100px;
+    pointer-events: auto; /* Re-enable pointer events for the sticker itself */
+}
+
+.sticker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.25rem 0.25rem 0.25rem 0.5rem;
+    cursor: move;
+    flex-shrink: 0;
+    background-color: rgba(0,0,0,0.1);
+}
+
+.sticker-title-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: inherit;
+    font-weight: 600;
+    padding: 2px 4px;
+    margin-right: 4px;
+    border-radius: 3px;
+    width: 100%;
+    transition: background-color 0.2s;
+}
+.sticker-title-input:hover, .sticker-title-input:focus {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+
+.sticker-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    position: relative; /* For settings popover */
+}
+
+.sticker-controls button {
+    width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.25rem;
+    color: rgba(255, 255, 255, 0.7);
+    transition: background-color 0.2s, color 0.2s;
+    flex-shrink: 0;
+}
+
+.sticker-controls button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.sticker-settings-popover {
+    position: absolute;
+    top: calc(100% + 5px);
+    right: 0;
+    background-color: #1f2937;
+    border: 1px solid #4b5563;
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    z-index: 10;
+    display: none;
+    width: 200px;
+    color: #d1d5db; /* gray-300 */
+}
+
+.sticker-settings-popover.open {
+    display: block;
+}
+
+.sticker-settings-popover label {
+    color: #9ca3af; /* gray-400 */
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.sticker-settings-popover .setting-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.sticker-settings-popover input[type="color"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 2.5rem;
+    height: 1.5rem;
+    background-color: transparent;
+    border: 1px solid #4b5563; /* gray-600 */
+    border-radius: 0.25rem;
+    cursor: pointer;
+    padding: 0;
+}
+.sticker-settings-popover input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 2px;
+}
+.sticker-settings-popover input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 0.125rem;
+}
+.sticker-settings-popover input[type="color"]::-moz-color-swatch {
+    border: none;
+    border-radius: 0.125rem;
+}
+
+
+.sticker-content {
+    padding: 0.5rem;
+    flex-grow: 1;
+    display: flex;
+}
+
+.sticker-textarea {
+    width: 100%;
+    height: 100%;
+    background-color: transparent;
+    border: none;
+    color: inherit; /* Inherits from sticker panel */
+    resize: none;
+    outline: none;
+    padding: 0;
+    margin: 0;
+}
+
+.sticker-textarea::placeholder {
+    color: rgba(255,255,255,0.4);
+    font-style: italic;
+}
+
+.sticker-textarea.placeholder-active {
+    color: rgba(255,255,255,0.4);
+    font-style: italic;
+}
+
+.sticker-panel .resize-handle {
+    background-color: transparent;
+}
+
+/* Minimized Stickers */
+.minimized-sticker {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%; /* Make it a circle */
+    cursor: pointer;
+    border: 2px solid rgba(255,255,255,0.3);
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.minimized-sticker:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 10px var(--sticker-color, #facc15);
+}
+
+
+/* Workflow Stepper Styles */
+#workflow-stepper .workflow-step {
+    flex: 1;
+    position: relative;
+    color: #6b7280; /* gray-500 */
+}
+#workflow-stepper .workflow-step.step-done,
+#workflow-stepper .workflow-step.clickable {
+    cursor: pointer;
+}
+#workflow-stepper .workflow-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 1rem;
+    transform: translateX(50%);
+    width: 100%;
+    height: 2px;
+    background-color: #374151; /* gray-700 */
+    z-index: -1;
+}
+
+#workflow-stepper .step-indicator {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background-color: #374151; /* gray-700 */
+    color: #9ca3af; /* gray-400 */
+    border: 2px solid #374151; /* gray-700 */
+    transition: all 0.2s;
+}
+
+#workflow-stepper .step-done .step-indicator,
+#workflow-stepper .step-active .step-indicator {
+    background-color: #14b8a6; /* teal-500 */
+    border-color: #14b8a6;
+    color: #fff;
+}
+#workflow-stepper .step-active .step-indicator {
+    box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.25);
+}
+
+#workflow-stepper .step-done:not(:last-child)::after {
+    background-color: #14b8a6; /* teal-500 */
+}
+
+#workflow-stepper .step-text {
+    position: absolute;
+    top: 2.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+#workflow-stepper .step-active .step-text,
+#workflow-stepper .step-done .step-text {
+    color: #a7f3d0; /* teal-200 */
+}
+
+.step-content-item {
+    display: none;
+}
+.step-content-item.active {
+    display: block;
+}
+
+#main-image-nav {
+    cursor: move;
+}

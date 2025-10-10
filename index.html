@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analisador de Migração de Esferoides v1.2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tiff.js/tiff.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Slab:wght@400;700&family=Lato:wght@400;700&family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+    <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@^0.8.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0"
+  }
+}
+</script>
+</head>
+<body class="bg-gray-900 text-gray-300 antialiased">
+
+    <div class="flex flex-col h-screen w-full bg-slate-950">
+        <!-- Top Header Bar -->
+        <header class="w-full flex-shrink-0 bg-gray-900/80 backdrop-blur-sm border-b border-gray-800 flex items-center justify-between p-2 pr-4 z-40">
+            <div class="flex items-center gap-3">
+                <div class="bg-teal-500/10 p-2 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-teal-400"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg></div>
+                <input type="text" id="headerProjectNameInput" class="bg-transparent text-lg font-bold text-white p-1 rounded-md focus:bg-gray-700 focus:ring-1 focus:ring-teal-400 outline-none transition-colors w-96" value="Analisador de Migração">
+            </div>
+            
+            <div class="flex items-center gap-2">
+                 <button id="add-sticker-btn" title="Adicionar Sticker" class="popup-button p-3 rounded-lg hover:bg-gray-700 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                 </button>
+                 <button id="header-project-btn" title="Projeto e Arquivos" class="popup-button p-3 rounded-lg hover:bg-gray-700 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" /></svg>
+                 </button>
+                 <button id="header-analysis-btn" title="Fluxo de Análise" class="popup-button p-3 rounded-lg hover:bg-gray-700 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>
+                 </button>
+                 <button id="header-adjustments-btn" title="Ajustes de Imagem (A)" class="popup-button p-3 rounded-lg hover:bg-gray-700 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" /></svg>
+                 </button>
+                 <button id="header-options-btn" title="Opções e Configurações" class="popup-button p-3 rounded-lg hover:bg-gray-700 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.438 1.001s.145.761.438 1.001l1.003.827c.424.35.534.954.26 1.431l-1.296 2.247a1.125 1.125 0 01-1.37.49l-1.217-.456c-.355-.133-.75-.072-1.075.124a6.57 6.57 0 01-.22.127c-.331.183-.581.495-.645.87l-.213 1.281c-.09.543-.56.941-1.11.941h-2.593c-.55 0-1.02-.398-1.11-.941l-.213-1.281c-.063-.374-.313-.686-.645-.87a6.52 6.52 0 01-.22-.127c-.324-.196-.72-.257-1.075-.124l-1.217.456a1.125 1.125 0 01-1.37-.49l-1.296-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.437-1.001s-.145-.761-.437-1.001l-1.004-.827a1.125 1.125 0 01-.26-1.431l1.296-2.247a1.125 1.125 0 011.37.49l1.217.456c.355.133.75.072 1.075.124.072-.044.146-.087.22-.127.332-.183.582-.495.645-.87L9.594 3.94zM15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                 </button>
+                 <button id="header-shortcuts-btn" title="Atalhos do Teclado" class="popup-button p-3 rounded-lg hover:bg-gray-700 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.5 1.591L5.25 12l4 1.591A2.25 2.25 0 019.75 15.185v5.714a2.25 2.25 0 01-1.5 2.085l-1.25.467a2.25 2.25 0 01-2.349-1.846l-.25-1.5a2.25 2.25 0 01.9-2.348l1.25-.467a2.25 2.25 0 001.5-2.085v-5.714a2.25 2.25 0 00-1.5-2.085l-1.25-.467a2.25 2.25 0 01-.9-2.348l.25-1.5a2.25 2.25 0 012.349-1.846l1.25.467A2.25 2.25 0 019.75 3.104zm4.5 0v5.714a2.25 2.25 0 00.5 1.591l4 1.591l-4 1.591a2.25 2.25 0 00-.5 1.591v5.714a2.25 2.25 0 001.5 2.085l1.25.467a2.25 2.25 0 002.349-1.846l.25-1.5a2.25 2.25 0 00-.9-2.348l-1.25-.467a2.25 2.25 0 01-1.5-2.085v-5.714a2.25 2.25 0 011.5-2.085l1.25-.467a2.25 2.25 0 00.9-2.348l-.25-1.5a2.25 2.25 0 00-2.349-1.846l-1.25.467a2.25 2.25 0 00-1.5 2.085z" /></svg>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-2">
+                 <button id="saveAnalyzedButton" title="Salvar Análise (S)" class="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">Salvar Análise</button>
+                 <button id="resetButton" title="Resetar Tudo (R)" class="bg-rose-600/80 hover:bg-rose-600 disabled:opacity-50 text-white font-bold p-2 rounded-lg transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Tab Bar -->
+        <div class="w-full flex-shrink-0 bg-gray-900 border-b border-gray-800">
+            <div id="tabs-container" class="flex items-center gap-1 p-1 overflow-x-auto">
+                 <!-- Tabs will be rendered here by the script -->
+            </div>
+        </div>
+
+        <!-- Área Principal da Imagem -->
+        <main class="flex-grow h-full flex flex-col relative">
+             <div id="recalculating-overlay" class="hidden absolute inset-0 bg-gray-900/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-4 text-white p-8">
+                <div class="loader"></div>
+                <h2 class="text-2xl font-bold mt-4">Recalculando Projeto...</h2>
+                <p class="text-gray-400">Aguarde, estamos atualizando todos os resultados.</p>
+            </div>
+             <div id="drag-drop-overlay" class="hidden absolute inset-0 bg-gray-900/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-4 text-white p-8">
+                <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="text-teal-400">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l-3.75 3.75M12 9.75l3.75 3.75M3 16.5V19.5a2.25 2.25 0 002.25 2.25h13.5A2.25 2.25 0 0021 19.5v-3M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                <h2 class="text-2xl font-bold">Solte as imagens aqui</h2>
+                <div id="drop-options" class="hidden flex-col items-center justify-center gap-3 mt-4">
+                    <p class="text-lg">Como deseja carregar as imagens?</p>
+                    <div class="flex gap-4">
+                        <button id="drop-replace-btn" class="bg-teal-600 hover:bg-teal-500 font-bold py-3 px-6 rounded-lg transition-colors">Substituir</button>
+                        <button id="drop-add-btn" class="bg-blue-600 hover:bg-blue-500 font-bold py-3 px-6 rounded-lg transition-colors">Adicionar</button>
+                        <button id="drop-cancel-btn" class="bg-gray-700 hover:bg-gray-600 font-bold py-3 px-6 rounded-lg transition-colors">Cancelar</button>
+                    </div>
+                </div>
+            </div>
+             <div id="canvas-container" class="flex-grow w-full relative flex items-center justify-center overflow-hidden">
+                <p id="initial-message" class="text-gray-500 text-lg">Selecione ou arraste uma imagem para começar</p>
+                <div id="loadingIndicator" class="hidden flex-col items-center justify-center absolute z-20"><div class="loader"></div><p class="mt-2 text-gray-300">Analisando com IA...</p></div>
+                <canvas id="resultCanvas"></canvas>
+            </div>
+            
+            <!-- Floating Controls -->
+            <div id="floating-controls" class="absolute top-4 right-4 flex flex-col items-end gap-2 z-30">
+                 <div class="bg-gray-900/80 backdrop-blur-sm p-1 border border-gray-700 rounded-lg">
+                    <button id="fullscreenButton" title="Tela Cheia (F)" class="w-10 h-10 flex items-center justify-center rounded-md hover:bg-gray-700 transition-colors"></button>
+                 </div>
+                 <div id="zoom-controls" class="hidden flex items-center gap-1 bg-gray-900/80 backdrop-blur-sm p-1 border border-gray-700 rounded-lg">
+                    <button id="zoomOutButton" title="Reduzir Zoom (-)" class="w-10 h-10 flex items-center justify-center text-xl rounded-md hover:bg-gray-700 transition-colors">-</button>
+                    <button id="zoomResetButton" title="Resetar Zoom (0)" class="w-10 h-10 flex items-center justify-center text-xs font-bold rounded-md hover:bg-gray-700 transition-colors">100%</button>
+                    <button id="zoomInButton" title="Aumentar Zoom (+)" class="w-10 h-10 flex items-center justify-center text-xl rounded-md hover:bg-gray-700 transition-colors">+</button>
+                 </div>
+                 <div class="bg-gray-900/80 backdrop-blur-sm p-1 border border-gray-700 rounded-lg mt-2">
+                    <button id="view-controls-icon-btn" title="Opções de Visualização" class="w-10 h-10 flex items-center justify-center rounded-md hover:bg-gray-700 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    </button>
+                 </div>
+            </div>
+            
+            <!-- Stickers -->
+            <div id="sticker-container" class="absolute inset-0 z-30 pointer-events-none">
+                <!-- Stickers will be rendered here -->
+            </div>
+
+            <!-- Minimized Panels Bar -->
+            <div id="minimized-panels-bar" class="absolute bottom-4 right-4 z-40 flex flex-row-reverse items-center gap-2">
+                <!-- Minimized panels and stickers will be rendered here by the script -->
+            </div>
+
+            <!-- Popups & Panels -->
+            <div id="results-container" class="resizable-panel hidden absolute bottom-4 left-4 w-96 max-w-full bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40">
+                <div class="popup-header flex items-center justify-between p-2 border-b border-gray-700 flex-shrink-0">
+                    <h3 class="font-bold text-base text-white ml-2">Resultados</h3>
+                    <div class="flex items-center gap-1">
+                        <button id="showCumulativeButton" title="Mostrar Resultados Acumulados" class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="text-teal-400" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M5 11.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5zm-3 1a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm0 4a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm0 4a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/></svg>
+                        </button>
+                        <button id="addCumulativeButton" title="Adicionar aos Resultados Acumulados" class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-700 disabled:opacity-50">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="text-teal-400" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>
+                        </button>
+                        <button id="toggleResultsButton" title="Minimizar Painel" class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-700">
+                           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M2 8a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11A.5.5 0 0 1 2 8z"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="radiusResult" class="p-3 text-sm overflow-y-auto flex-grow"></div>
+                <div class="resize-handle"></div>
+            </div>
+
+            <div id="cumulative-results-container" class="resizable-panel hidden absolute bottom-24 left-4 w-[600px] max-w-[calc(100%-2rem)] bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40">
+                <div class="popup-header flex items-center justify-between p-2 border-b border-gray-700 flex-shrink-0">
+                    <h3 class="font-bold text-base text-white ml-2">Resultados Acumulados</h3>
+                    <div class="flex items-center gap-1">
+                        <button id="clearCumulativeButton" title="Limpar Dados Acumulados" class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-700 disabled:opacity-50"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="text-rose-400" viewBox="0 0 16 16"><path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H2.506a.58.58 0 0 0-.01 0H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0 1h-.995a.59.59 0 0 0-.01 0H11Zm1.958 1-.846 10.58a1 1 0 0 1-.997.92h-6.23a1 1 0 0 1-.997-.92L3.042 3.5h9.916Zm-7.487 1a.5.5 0 0 1 .528.47l.5 8.5a.5.5 0 0 1-.998.06L5 5.03a.5.5 0 0 1 .47-.528ZM8 4.5a.5.5 0 0 1 .5.5v8.5a.5.5 0 0 1-1 0V5a.5.5 0 0 1 .5-.5Zm2.522.47a.5.5 0 0 1 .528.47l-.5 8.5a.5.5 0 1 1-.998.06l.5-8.5a.5.5 0 0 1 .47-.528Z"/></svg></button>
+                        <button id="copyCumulativeCsvButton" title="Copiar Tabela CSV" class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-700 disabled:opacity-50"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1-1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5-.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3z"/></svg></button>
+                        <button id="saveCumulativeCsvButton" title="Salvar como CSV" class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-700 disabled:opacity-50"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg></button>
+                        <button id="openInSheetsButton" title="Abrir no Google Sheets" class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-700 disabled:opacity-50">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="text-green-400" viewBox="0 0 16 16"><path d="M14 0H2a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zM8 14H3V7h5v7zm0-8H3V3h5v3zm5 8H9V7h5v7zm0-8H9V3h5v3z"/></svg>
+                        </button>
+                        <button id="toggleCumulativeResultsButton" title="Minimizar Painel (T)" class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-700"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M2 8a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11A.5.5 0 0 1 2 8z"/></svg></button>
+                    </div>
+                </div>
+                <div id="cumulativeResultTableContainer" class="p-2 text-sm overflow-auto flex-grow"></div>
+                <div class="resize-handle"></div>
+            </div>
+
+            <div id="main-image-nav" class="absolute hidden bottom-4 left-1/2 -translate-x-1/2 z-30 items-center gap-2 bg-gray-900/80 backdrop-blur-sm p-2 border border-gray-700 rounded-lg">
+                <button id="main-prevImageButton" class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 px-3 rounded-lg transition-colors text-sm">&lt; Anterior</button>
+                <span id="main-imageNavStatus" class="text-sm font-medium text-gray-400 px-2 truncate"></span>
+                <button id="main-nextImageButton" class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 px-3 rounded-lg transition-colors text-sm">Próximo &gt;</button>
+                <button id="main-deleteImageButton" title="Deletar Imagem" class="p-2 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
+            </div>
+
+            <div id="toast-notification" class="hidden opacity-0 -translate-y-12 fixed top-5 left-1/2 -translate-x-1/2 bg-teal-500/90 text-white text-sm font-semibold py-2 px-5 rounded-lg shadow-lg z-50">
+                Resultado adicionado à tabela!
+            </div>
+
+            <div id="pixelInspector" class="hidden absolute bottom-4 left-4 bg-gray-900/70 backdrop-blur-sm text-white text-xs rounded-lg px-3 py-1.5 border border-gray-700 font-mono z-20 pointer-events-none"></div>
+
+            <div id="brushControls" class="resizable-panel hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-11/12 max-w-sm p-4 bg-gray-900/80 backdrop-blur-sm border border-gray-700/80 shadow-2xl z-40 rounded-lg">
+                <h3 class="popup-header text-lg font-semibold text-white text-center flex-shrink-0">Controle do Pincel</h3>
+                <div class="flex-grow space-y-4">
+                    <label class="text-sm font-medium">Tamanho do Pincel</label>
+                    <div class="flex items-center gap-3 mt-2"><input type="range" id="brushSizeInput" min="1" max="100" value="20"><input type="number" id="brushSizeNumber" min="1" max="100" value="20" class="bg-gray-700 w-20 text-center border border-gray-600 rounded-md p-1"></div>
+                </div>
+                <div class="flex gap-2 flex-shrink-0">
+                    <button id="confirmPaintButton" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg w-full transition-colors text-sm">Confirmar<kbd class="shortcut-key">Enter</kbd></button>
+                    <button id="cancelPaintButton" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg w-full transition-colors text-sm">Cancelar<kbd class="shortcut-key">Esc</kbd></button>
+                </div>
+                <div class="resize-handle"></div>
+            </div>
+
+            <div id="project-panel" class="resizable-panel hidden absolute top-20 left-4 w-[380px] bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40"></div>
+            <div id="analysis-workflow-panel" class="resizable-panel hidden absolute top-24 left-8 w-[380px] bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40"></div>
+            <div id="adjustments-panel" class="resizable-panel hidden absolute top-40 left-24 w-[380px] bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40"></div>
+            <div id="options-panel" class="resizable-panel hidden absolute top-44 left-28 w-[380px] bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40"></div>
+            <div id="shortcuts-panel" class="resizable-panel hidden absolute top-48 left-32 w-[420px] bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40"></div>
+            <div id="view-controls-panel" class="resizable-panel hidden absolute bottom-4 right-4 w-[280px] bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40"></div>
+            
+             <!-- Creator Footer -->
+            <footer id="creator-footer" class="absolute bottom-2 left-4 z-10 text-xs text-gray-500 bg-gray-900/50 backdrop-blur-sm p-2 rounded-lg flex items-center gap-4">
+                <span>Criado por <strong>Irlã Lima</strong></span>
+                <div class="flex items-center gap-3">
+                    <a href="https://instagram.com/oxebiologo" target="_blank" title="Instagram" class="hover:text-teal-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0C5.829 0 5.556.01 4.703.048 3.85.088 3.269.222 2.76.42a3.917 3.917 0 0 0-1.417.923A3.927 3.927 0 0 0 .42 2.76C.222 3.268.087 3.85.048 4.7.01 5.555 0 5.827 0 8.001c0 2.172.01 2.444.048 3.297.04.852.174 1.433.372 1.942.205.526.478.972.923 1.417.444.445.89.719 1.416.923.51.198 1.09.333 1.942.372C5.555 15.99 5.827 16 8 16s2.444-.01 3.298-.048c.851-.04 1.434-.174 1.943-.372a3.916 3.916 0 0 0 1.416-.923c.445-.445.718-.891.923-1.417.197-.509.332-1.09.372-1.942C15.99 10.445 16 10.173 16 8s-.01-2.445-.048-3.299c-.04-.851-.175-1.433-.372-1.941a3.926 3.926 0 0 0-.923-1.417A3.911 3.911 0 0 0 13.24.42c-.51-.198-1.092-.333-1.943-.372C10.443.01 10.172 0 7.998 0h.003zm-.717 1.442h.718c2.136 0 2.389.007 3.232.046.78.035 1.204.166 1.486.275.373.145.64.319.92.599.28.28.453.546.598.92.11.281.24.705.275 1.485.039.843.047 1.096.047 3.231s-.008 2.389-.047 3.232c-.035.78-.166 1.203-.275 1.485a2.47 2.47 0 0 1-.599.919c-.28.28-.546.453-.92.598-.28.11-.704.24-1.485.276-.843.038-1.096.047-3.232.047s-2.39-.009-3.233-.047c-.78-.036-1.203-.166-1.485-.276a2.478 2.478 0 0 1-.92-.598 2.48 2.48 0 0 1-.6-.92c-.109-.281-.24-.705-.275-1.485-.038-.843-.046-1.096-.046-3.231 0-2.136.008-2.388.046-3.231.036-.78.166-1.204.276-1.486.145-.373.319-.64.599-.92.28-.28.546-.453.92-.598.282-.11.705-.24 1.485-.276.738-.034 1.024-.044 2.515-.045v.002zm4.988 1.884a1.161 1.161 0 1 0 0 2.322 1.161 1.161 0 0 0 0-2.322zM8 4.405a3.595 3.595 0 1 0 0 7.19 3.595 3.595 0 0 0 0-7.19zm0 1.441a2.155 2.155 0 1 1 0 4.31 2.155 2.155 0 0 1 0-4.31z"/></svg></a>
+                    <a href="https://www.linkedin.com/in/irl%C3%A3-lima-473a10267/" target="_blank" title="LinkedIn" class="hover:text-teal-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M0 1.146C0 .513.526 0 1.175 0h13.65C15.474 0 16 .513 16 1.146v13.708c0 .633-.526 1.146-1.175 1.146H1.175C.526 16 0 15.487 0 14.854V1.146zm4.943 12.248V6.169H2.542v7.225h2.401zm-1.2-8.212c.837 0 1.358-.554 1.358-1.248-.015-.709-.52-1.248-1.342-1.248-.822 0-1.359.54-1.359 1.248 0 .694.521 1.248 1.327 1.248h.016zm4.908 8.212V9.359c0-.216.016-.432.08-.586.173-.431.568-.878 1.232-.878.869 0 1.216.662 1.216 1.634v3.865h2.401V9.25c0-2.22-1.184-3.252-2.764-3.252-1.274 0-1.845.7-2.165 1.193v.025h-.016a5.54 5.54 0 0 1 .016-.025V6.169h-2.4c.03.678 0 7.225 0 7.225h2.4z"/></svg></a>
+                    <a href="mailto:Sci.lima@outlook.com" target="_blank" title="Email" class="hover:text-teal-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M.05 3.555A2 2 0 0 1 2 2h12a2 2 0 0 1 1.95 1.555L8 8.414.05 3.555ZM0 4.697v7.104l5.803-3.558L0 4.697ZM6.761 8.83l-6.57 4.027A2 2 0 0 0 2 14h12a2 2 0 0 0 1.808-1.144l-6.57-4.027L8 9.586l-1.239-.757Zm3.436-.586L16 11.801V4.697l-5.803 3.546Z"/></svg></a>
+                    <a href="https://orcid.org/0009-0002-4394-0070" target="_blank" title="ORCID" class="hover:text-teal-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="#a6ce39" viewBox="0 0 256 256"><path d="M256,128c0,70.7-57.3,128-128,128S0,198.7,0,128,57.3,0,128,0,256,57.3,256,128Z"/><path d="M128,32.4A95.6,95.6,0,1,1,32.4,128,95.7,95.7,0,0,1,128,32.4M114.3,205.1h27.4V108.4H114.3ZM102.1,78.1a25.9,25.9,0,1,1,25.9,25.9,25.9,25.9,0,0,1-25.9-25.9Z" fill="#fff"/></svg></a>
+                    <a href="http://lattes.cnpq.br/4430554182628866" target="_blank" title="Lattes" class="hover:text-teal-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 18v-2h-2v2h2zm-2-4h2v-2h-2v2z"/></svg></a>
+                    <a href="https://www.researchgate.net/profile/Irla-Lima?ev=hdr_xprf" target="_blank" title="ResearchGate" class="hover:text-teal-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M15.42 16.58c-1.29-.86-2-2.14-2-3.58h-1.5c.03.62-.05 1.26-.26 1.87-.27.8-.75 1.52-1.4 2.11C9.6 17.58 8.6 18 7.5 18c-1.3 0-2.42-.56-3.25-1.43C3.42 15.7 3 14.6 3 13.33c0-1.2.36-2.27 1.09-3.21.73-.94 1.7-1.41 2.91-1.41.93 0 1.79.33 2.56.98.78.65 1.17 1.45 1.17 2.41H9.17c0-.5-.13-.94-.38-1.32-.25-.38-.63-.57-1.12-.57-.45 0-.8.16-1.06.48s-.39.73-.39 1.23c0 .53.15.98.44 1.34.29.36.68.54 1.16.54.49 0 .9-.18 1.24-.53.33-.35.5-.78.5-1.29h1.5c0 .6-.13 1.2-.38 1.8-.25.6-.63 1.1-1.13 1.5-.5.4-1.1.6-1.8.6-.86 0-1.6-.3-2.23-.9-.63-.6-1.07-1.37-1.33-2.3-.25-.93-.38-1.92-.38-2.95C3 8.1 3.4 6.7 4.2 5.66c.8-.94 1.8-1.41 3-1.41s2.2.47 3 1.41c.8.94 1.2 2.22 1.2 3.83v7.09h5.1V9.42h-1.5v6.5c0 .21-.06.38-.18.52s-.27.21-.45.21c-.2 0-.38-.08-.51-.23s-.2-.35-.2-.59zm-3.08-5.5c0-1.04-.3-1.9-1-2.58-.6-.6-1.3-.9-2.2-.9-.8 0-1.5.3-2.1.9-.6.6-.9 1.4-.9 2.4s.3 1.8.9 2.5c.6.6 1.3.9 2.1.9.8 0 1.5-.3 2.1-.9.6-.6.9-1.5.9-2.5z"/></svg></a>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <!-- Hidden placeholders for section content, to be moved into floating panels -->
+    <div id="section-placeholders" class="hidden">
+        <div id="shortcuts-section">
+             <div class="flex items-center justify-between p-2">
+                <p class="text-xs text-gray-400">Clique em 'Editar' para definir um novo atalho.</p>
+                <button id="resetShortcutsButton" class="bg-rose-600 hover:bg-rose-500 text-white font-bold py-1 px-3 rounded-lg transition-colors text-xs">Resetar Padrões</button>
+             </div>
+             <div id="shortcuts-list" class="space-y-1">
+                <!-- Shortcut items will be populated by the script -->
+             </div>
+        </div>
+
+        <div id="project-section">
+            <details open class="subsection-details">
+                <summary><h4 class="font-semibold text-gray-400 text-sm">Gerenciador de Projetos</h4></summary>
+                <div class="subsection-content px-3 pt-2 pb-3 space-y-3">
+                    <div class="grid grid-cols-2 gap-2">
+                            <label class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm text-center cursor-pointer">
+                            Carregar Projeto
+                            <input type="file" id="loadProjectInput" class="hidden" accept=".spheroidproj">
+                        </label>
+                        <button id="newProjectButton" class="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm">Novo Projeto</button>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400">Nome do Arquivo do Projeto</label>
+                        <div class="flex gap-2 mt-1">
+                            <input type="text" id="projectNameInput" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2" placeholder="Nome do arquivo...">
+                            <button id="saveProjectButton" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm flex-shrink-0">Salvar Projeto</button>
+                        </div>
+                    </div>
+                </div>
+            </details>
+        </div>
+
+        <div id="upload-section">
+            <details open class="subsection-details">
+                <summary><h4 class="font-semibold text-gray-400 text-sm">Carregar Imagem</h4></summary>
+                <div class="subsection-content px-3 pt-2 pb-3 space-y-4">
+                    <div class="bg-gray-900/50 border border-dashed border-gray-600 rounded-xl p-4 text-center">
+                        <input type="file" id="imageLoader" accept="image/png, image/jpeg, image/bmp, image/tiff, image/tif" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 font-semibold file:bg-teal-500/80 file:text-white hover:file:bg-teal-600 cursor-pointer" multiple />
+                        <p class="text-xs text-gray-500 mt-2">Suporta PNG, JPG, BMP, TIF. Selecione múltiplos arquivos.</p>
+                    </div>
+                        <p id="fileNameDisplay" class="text-center text-sm text-teal-400 font-medium h-5 truncate" title=""></p>
+                        <div id="imageNavControls" class="hidden items-center justify-between gap-2">
+                        <button id="prevImageButton" class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 px-3 rounded-lg transition-colors text-sm">&lt; Anterior</button>
+                        <span id="imageNavStatus" class="text-sm font-medium text-gray-400 truncate" title=""></span>
+                        <button id="nextImageButton" class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 px-3 rounded-lg transition-colors text-sm">Próximo &gt;</button>
+                        <button id="deleteImageButton" title="Deletar Imagem" class="p-2 ml-2 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
+                    </div>
+                </div>
+            </details>
+        </div>
+        
+        <div id="analysis-workflow-section">
+            <!-- New Stepper UI -->
+            <ol id="workflow-stepper" class="flex items-center w-full mb-6">
+                <li class="workflow-step flex items-center" data-step="0">
+                    <span class="step-indicator flex items-center justify-center font-bold">1</span>
+                    <span class="step-text">Preparação</span>
+                </li>
+                <li class="workflow-step flex items-center" data-step="1">
+                    <span class="step-indicator flex items-center justify-center font-bold">2</span>
+                    <span class="step-text">Núcleo</span>
+                </li>
+                <li class="workflow-step flex items-center" data-step="2">
+                    <span class="step-indicator flex items-center justify-center font-bold">3</span>
+                    <span class="step-text">Raios</span>
+                </li>
+                 <li class="workflow-step flex items-center" data-step="3">
+                    <span class="step-indicator flex items-center justify-center font-bold">4</span>
+                    <span class="step-text">Células</span>
+                </li>
+                 <li class="workflow-step flex items-center" data-step="4">
+                    <span class="step-indicator flex items-center justify-center font-bold">5</span>
+                    <span class="step-text">Borda</span>
+                </li>
+            </ol>
+
+            <!-- Step Content Container -->
+            <div id="workflow-step-content-container">
+                <div class="step-content-item" data-step="0">
+                     <div class="grid grid-cols-1 gap-2">
+                        <button id="convertTo8BitButton" class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm flex items-center justify-center gap-2">Converter para 8-bit<span id="bitStatus" class="text-xs font-bold ml-auto px-2 py-0.5 rounded-full"></span></button>
+                    </div>
+                </div>
+                <div class="step-content-item" data-step="1">
+                    <div class="space-y-3">
+                        <div>
+                            <p class="text-center text-xs font-semibold text-gray-400 mb-1">Núcleo do Esferoide</p>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button id="paintSpheroidButton" class="manual-button bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2 px-3 rounded-lg w-full transition-colors text-sm">Pintar<kbd class="shortcut-key">P</kbd></button>
+                                <button id="drawSpheroidButton" data-mode="drawSpheroid" class="manual-button bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2 px-3 rounded-lg w-full transition-colors text-sm">Contorno<kbd class="shortcut-key">D</kbd></button>
+                                <button id="magicPaintButton" data-mode="magicPaint" class="manual-button bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2 px-3 rounded-lg w-full transition-colors text-sm">Mágica<kbd class="shortcut-key">G</kbd></button>
+                                <button id="undoPointButton" class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2 px-3 rounded-lg transition-colors" title="Limpar contorno/pintura (U)">Limpar<kbd class="shortcut-key">U</kbd></button>
+                            </div>
+                            <div id="magicWandControls" class="hidden p-2 bg-gray-900/50 rounded-md mt-2"><label class="text-xs text-gray-300">Tolerância da Mágica</label><div class="flex gap-2"><input type="range" id="magicWandToleranceInput" min="1" max="100" value="20"><input type="number" id="magicWandToleranceNumber" class="bg-gray-700 w-16 text-center border border-gray-600 rounded-md p-1 text-xs" min="1" max="100" value="20"></div></div>
+                            <button id="refineContourButton" class="manual-button bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold py-2 px-4 rounded-lg w-full transition-colors text-sm mt-2">Ajuste de Contorno (IA)</button>
+                            <label class="flex items-center justify-between w-full text-sm mt-2"><span class="font-medium text-gray-400">Cor do Núcleo</span><input id="spheroidLineColorInput" type="color" value="#ff4d4d" class="bg-transparent border-none rounded cursor-pointer h-8 w-10"></label>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-content-item" data-step="2">
+                    <div class="space-y-3">
+                        <p class="text-center text-xs font-semibold text-gray-400 mb-1">Raios de Medição</p>
+                        <div class="flex items-center gap-2">
+                            <button id="setHaloPointButton" data-mode="setHaloPoint" class="manual-button bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white font-bold py-2 px-4 rounded-lg w-full transition-colors text-sm">Raio do Halo<kbd class="shortcut-key">H</kbd></button>
+                            <input id="haloLineColorInput" type="color" value="#fb923c" title="Cor do Raio Halo" class="bg-transparent border-none rounded cursor-pointer h-10 w-12">
+                        </div>
+                        <div class="flex items-center gap-2 mt-2">
+                            <button id="setMigrationPointButton" data-mode="setMigrationPoint" class="manual-button bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white font-bold py-2 px-4 rounded-lg w-full transition-colors text-sm">Ponto Máximo<kbd class="shortcut-key">M</kbd></button>
+                            <input id="maxLineColorInput" type="color" value="#c026d3" title="Cor do Raio Máximo" class="bg-transparent border-none rounded cursor-pointer h-10 w-12">
+                        </div>
+                    </div>
+                </div>
+                <div class="step-content-item" data-step="3">
+                    <div class="space-y-3">
+                        <p class="text-center text-xs font-semibold text-gray-400 mb-1">Contagem de Células</p>
+                        <div class="text-center p-2 bg-gray-800/50 rounded-md">
+                            <label class="font-semibold text-gray-400 text-xs">Total de Células</label>
+                            <p id="totalCellCounter" class="text-4xl font-bold text-white">0</p>
+                        </div>
+                        <p id="cell-counter-status" class="text-center text-teal-300 text-xs h-4"></p>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="addCellButton" class="manual-button bg-cyan-700 hover:bg-cyan-600 text-white py-2 px-4 rounded-lg w-full transition-colors text-sm">Adicionar</button>
+                            <button id="removeCellButton" class="manual-button bg-amber-600 hover:bg-amber-500 text-white py-2 px-4 rounded-lg w-full transition-colors text-sm">Remover</button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mt-2">
+                            <button id="clearCellsButton" class="w-full bg-rose-800 hover:bg-rose-700 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">Limpar</button>
+                            <button id="confirmCellCountButton" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">Confirmar</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-content-item" data-step="4">
+                    <div class="space-y-3">
+                         <p class="text-center text-xs font-semibold text-gray-400 mb-1">Borda de Migração</p>
+                         <div class="grid grid-cols-2 gap-2">
+                             <button id="drawMarginButton" class="manual-button bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2 px-3 rounded-lg w-full transition-colors text-sm">Desenhar Borda<kbd class="shortcut-key">B</kbd></button>
+                             <button id="paintMarginButton" class="manual-button bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2 px-3 rounded-lg w-full transition-colors text-sm">Pintar Borda</button>
+                             <button id="smoothMarginButton" class="manual-button bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white py-2 px-3 rounded-lg w-full transition-colors text-sm">Suavizar</button>
+                             <button id="clearMarginButton" class="manual-button bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm">Limpar Borda</button>
+                         </div>
+                         <label class="flex items-center justify-between w-full text-sm mt-2"><span class="font-medium text-gray-400">Cor da Borda</span><input id="marginLineColorInput" type="color" value="#fde047" class="bg-transparent border-none rounded cursor-pointer h-8 w-10"></label>
+                         <button id="confirmAnalysisButton" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm mt-4">Confirmar e Finalizar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="adjustments-section">
+            <details open class="subsection-details">
+                <summary><h4 class="font-semibold text-gray-400 text-sm">Ajustes de Cor e Tom</h4></summary>
+                <div class="subsection-content px-3 pt-2 pb-3 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <label class="flex items-center cursor-pointer"><input id="invertCheckbox" type="checkbox" class="w-4 h-4 text-teal-500 bg-gray-700 border-gray-600 rounded focus:ring-teal-500"><span class="ml-2 text-sm">Inverter Cores</span></label>
+                        <button id="resetAdjustmentsButton" title="Resetar ajustes" class="bg-gray-700 hover:bg-gray-600 text-xs px-2 py-1 rounded-md disabled:opacity-50">Resetar</button>
+                    </div>
+                    <div><label class="text-sm">Brilho</label><div class="flex gap-3"><input type="range" id="brightnessInput" min="-100" max="100" value="0"><input type="number" id="brightnessNumber" class="bg-gray-700 w-20 text-center border border-gray-600 rounded-md p-1 text-xs" min="-100" max="100" value="0"></div></div>
+                    <div><label class="text-sm">Contraste</label><div class="flex gap-3"><input type="range" id="contrastInput" min="-100" max="100" value="0"><input type="number" id="contrastNumber" class="bg-gray-700 w-20 text-center border border-gray-600 rounded-md p-1 text-xs" min="-100" max="100" value="0"></div></div>
+                    <div><label class="text-sm">Nitidez</label><div class="flex gap-3"><input type="range" id="sharpnessInput" min="0" max="100" value="0"><input type="number" id="sharpnessNumber" class="bg-gray-700 w-20 text-center border border-gray-600 rounded-md p-1 text-xs" min="0" max="100" value="0"></div></div>
+                    <div><label class="text-sm">Realces</label><div class="flex gap-3"><input type="range" id="highlightsInput" min="-100" max="100" value="0"><input type="number" id="highlightsNumber" class="bg-gray-700 w-20 text-center border border-gray-600 rounded-md p-1 text-xs" min="-100" max="100" value="0"></div></div>
+                    <div><label class="text-sm">Sombras</label><div class="flex gap-3"><input type="range" id="shadowsInput" min="-100" max="100" value="0"><input type="number" id="shadowsNumber" class="bg-gray-700 w-20 text-center border border-gray-600 rounded-md p-1 text-xs" min="-100" max="100" value="0"></div></div>
+                    <div><label class="text-sm">Brancos</label><div class="flex gap-3"><input type="range" id="whitesInput" min="0" max="255" value="255"><input type="number" id="whitesNumber" class="bg-gray-700 w-20 text-center border border-gray-600 rounded-md p-1 text-xs" min="0" max="255" value="255"></div></div>
+                    <div><label class="text-sm">Pretos</label><div class="flex gap-3"><input type="range" id="blacksInput" min="0" max="255" value="0"><input type="number" id="blacksNumber" class="bg-gray-700 w-20 text-center border border-gray-600 rounded-md p-1 text-xs" min="0" max="255" value="0"></div></div>
+                    <input id="grayscaleCheckbox" type="checkbox" class="hidden">
+                </div>
+            </details>
+            <details open class="subsection-details">
+                <summary><h4 class="font-semibold text-gray-400 text-sm">Subtração de Fundo</h4></summary>
+                    <div class="subsection-content px-3 pt-2 pb-3 space-y-2">
+                    <div class="flex items-center gap-2">
+                        <button id="selectBackgroundButton" title="Selecionar cor de fundo da imagem" class="popup-button bg-cyan-700 hover:bg-cyan-600 text-white font-bold p-2.5 rounded-lg transition-colors text-sm w-full flex items-center justify-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8.21,3.14,4.22,7.13a1,1,0,0,0,0,1.41l5.3,5.3a1,1,0,0,0,1.41,0L15.78,9a1,1,0,0,0,0-1.41L11.7,3.51a1,1,0,0,0-1.41,0L9.62,4.18Z"/><path d="M3,14H8.88l-5-5Z"/></svg>
+                            Selecionar Fundo
+                        </button>
+                        <div id="backgroundColorPreview" class="w-10 h-10 rounded-md border-2 border-gray-600 flex-shrink-0" style="background-color: #000;"></div>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-300">Tolerância</label>
+                        <div class="flex gap-2">
+                            <input type="range" id="backgroundToleranceInput" min="1" max="150" value="20">
+                            <input type="number" id="backgroundToleranceNumber" class="bg-gray-700 w-16 text-center border border-gray-600 rounded-md p-1 text-xs" min="1" max="150" value="20">
+                        </div>
+                    </div>
+                </div>
+            </details>
+            <details open class="subsection-details">
+                <summary><h4 class="font-semibold text-gray-400 text-sm">Ajustes de Binarização</h4></summary>
+                    <div class="subsection-content px-3 pt-2 pb-3 space-y-2">
+                    <label class="flex items-center cursor-pointer"><input id="binarizeCheckbox" type="checkbox" class="w-4 h-4 text-teal-500 bg-gray-700 border-gray-600 rounded focus:ring-teal-500"><span class="ml-2 text-sm">Ativar Binarização (na área de migração)</span></label>
+                    <div>
+                        <label class="text-xs text-gray-300">Limiar (Threshold)</label>
+                        <div class="flex gap-2">
+                            <input type="range" id="binaryThresholdInput" min="0" max="255" value="128">
+                            <input type="number" id="binaryThresholdNumber" class="bg-gray-700 w-16 text-center border border-gray-600 rounded-md p-1 text-xs" min="0" max="255" value="128">
+                        </div>
+                    </div>
+                </div>
+            </details>
+        </div>
+
+        <div id="options-section">
+            <details open class="subsection-details">
+                <summary><h4 class="font-semibold text-gray-400 text-sm">Configuração de Escala</h4></summary>
+                <div class="subsection-content p-3 border border-gray-700 rounded-lg bg-gray-900/50">
+                    <div class="flex items-end gap-2"><div class="flex-1"><label class="text-xs text-gray-400">Pixels (px)</label><input type="number" id="scaleBarPixelsInput" value="1.5" step="0.01" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2 mt-1"></div><div class="text-gray-400 pb-2 font-bold text-lg">=</div><div class="flex-1"><label class="text-xs text-gray-400">Micrômetros (µm)</label><input type="number" id="scaleBarMicrometersInput" value="1" step="0.01" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2 mt-1"></div></div>
+                </div>
+            </details>
+            <details open class="subsection-details">
+                <summary><h4 class="font-semibold text-gray-400 text-sm">Fonte & Aparência</h4></summary>
+                    <div class="subsection-content space-y-3">
+                    <div>
+                        <label class="text-xs text-gray-400">Fonte do Layout</label>
+                        <select id="layoutFontFamily" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2 mt-1">
+                            <option value="'Inter', sans-serif" selected>Inter</option>
+                            <option value="'Roboto Slab', serif">Roboto Slab</option>
+                            <option value="'Lato', sans-serif">Lato</option>
+                            <option value="'Open Sans', sans-serif">Open Sans</option>
+                            <option value="Arial, sans-serif">Arial</option>
+                            <option value="'Times New Roman', serif">Times New Roman</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400">Fonte da Régua</label>
+                        <div class="grid grid-cols-2 gap-2 mt-1">
+                            <select id="rulerFontFamily" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2">
+                                <option value="Inter" selected>Inter</option>
+                                <option value="Roboto Slab">Roboto Slab</option>
+                                <option value="Lato">Lato</option>
+                                <option value="Open Sans">Open Sans</option>
+                                <option value="Arial">Arial</option>
+                                <option value="Times New Roman">Times New Roman</option>
+                            </select>
+                            <input type="number" id="rulerFontSize" value="60" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2" placeholder="Tamanho">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400">Fonte da Contagem</label>
+                        <div class="grid grid-cols-1 gap-2 mt-1">
+                            <input type="number" id="cellNumberFontSize" value="18" min="6" max="100" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2" placeholder="Tamanho">
+                        </div>
+                    </div>
+                </div>
+            </details>
+            <details open class="subsection-details">
+                <summary><h4 class="font-semibold text-gray-400 text-sm">Perfis de Configuração</h4></summary>
+                    <div class="subsection-content space-y-3">
+                        <div>
+                        <label class="text-xs text-gray-400">Carregar Perfil</label>
+                        <select id="profileSelect" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2 mt-1">
+                            <option value="__default__">Padrão</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400">Nome do Perfil</label>
+                        <input type="text" id="profileNameInput" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2 mt-1" placeholder="Ex: Células MCF-7 Dia 3">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                            <button id="saveProfileButton" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm">Salvar Perfil</button>
+                            <button id="deleteProfileButton" class="bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm">Deletar Perfil</button>
+                    </div>
+                </div>
+            </details>
+        </div>
+        <div id="view-controls-section">
+             <details open class="subsection-details">
+                <summary><h4 class="font-semibold text-gray-400 text-sm">Visualização</h4></summary>
+                <div class="subsection-content space-y-2">
+                    <label class="flex items-center w-full"><input id="showHaloRadiusCircleCheckbox" type="checkbox" checked class="w-4 h-4 text-teal-500 bg-gray-700 border-gray-600 rounded"><span class="ml-3 text-sm">Mostrar Círculo do Halo</span></label>
+                    <label class="flex items-center w-full"><input id="showMaxRadiusCircleCheckbox" type="checkbox" checked class="w-4 h-4 text-teal-500 bg-gray-700 border-gray-600 rounded"><span class="ml-3 text-sm">Mostrar Círculo Máximo</span></label>
+                    <label class="flex items-center w-full"><input id="rulerCheckbox" type="checkbox" checked class="w-4 h-4 text-teal-500 bg-gray-700 border-gray-600 rounded"><span class="ml-3 text-sm">Mostrar Réguas de Raio</span></label>
+                    <label class="flex items-center w-full"><input id="paintCellsCheckbox" type="checkbox" checked class="w-4 h-4 text-teal-500 bg-gray-700 border-gray-600 rounded"><span class="ml-3 text-sm">Pintar Células Contadas</span></label>
+                    <label class="flex items-center w-full"><input id="iaDrawCheckbox" type="checkbox" class="w-4 h-4 text-teal-500 bg-gray-700 border-gray-600 rounded"><span class="ml-3 text-sm">Desenho Suave (IA) da Contagem</span></label>
+                    <label class="flex items-center w-full"><input id="showCellNumbersCheckbox" type="checkbox" checked class="w-4 h-4 text-teal-500 bg-gray-700 border-gray-600 rounded"><span class="ml-3 text-sm">Numerar Células Contadas</span></label>
+                    <div class="pt-2 border-t border-gray-700">
+                        <label class="text-xs text-gray-400">Espessura da Linha de Análise (px)</label>
+                        <input type="number" id="analysisLineWidth" value="8" min="1" max="50" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg block w-full p-2 mt-1">
+                    </div>
+                </div>
+            </details>
+        </div>
+    </div>
+    
+    <canvas id="originalCanvas"></canvas>
+    <canvas id="processedImageCanvas"></canvas>
+    <canvas id="paintCanvas"></canvas>
+    <canvas id="paintSpheroidCanvas"></canvas>
+    <canvas id="manualPaintCanvas"></canvas>
+    
+    <script type="module" src="index.tsx"></script>
+</body>
+</html>
