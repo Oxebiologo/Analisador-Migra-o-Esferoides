@@ -40,6 +40,7 @@ export function updateUIMode() {
         cursorStyle = 'crosshair';
         if (state.paintModeContext === 'spheroid') statusText = 'Pinte sobre o esferoide.';
         else if (state.paintModeContext === 'margin') statusText = 'Pinte a área de migração.';
+        else if (state.paintModeContext === 'eraser') statusText = 'Use o pincel para apagar partes da pintura.';
     } else if (state.currentMode) {
         const activeBtn = document.querySelector(`.manual-button[data-mode="${state.currentMode}"]`) || document.getElementById(state.currentMode + 'Button');
         activeBtn?.classList.add('active');
@@ -183,21 +184,31 @@ export function initializePanels() {
         'adjustments': { btn: 'header-adjustments-btn', panel: 'adjustments-panel', content: ['adjustments-section'], title: 'Ajustes de Imagem' },
         'options': { btn: 'header-options-btn', panel: 'options-panel', content: ['options-section'], title: 'Opções & Configurações' },
         'shortcuts': { btn: 'header-shortcuts-btn', panel: 'shortcuts-panel', content: ['shortcuts-section'], title: 'Atalhos do Teclado' },
-        'view': { btn: 'view-controls-icon-btn', panel: 'view-controls-panel', content: ['view-controls-section'], title: 'Visualização' }
+        'view': { btn: 'view-controls-icon-btn', panel: 'view-controls-panel', content: ['view-controls-section'], title: 'Visualização' },
+        'speed': { btn: 'header-speed-btn', panel: 'speed-analysis-panel', content: ['speed-analysis-section'], title: 'Análise de Velocidade' },
+        'help': { btn: 'header-help-btn', panel: 'help-panel', content: ['help-section'], title: 'Ajuda & Tutorial' }
     };
+
     for (const key in panels) {
         const p = panels[key as keyof typeof panels];
         const panelEl = document.getElementById(p.panel) as HTMLElement;
         const buttonEl = document.getElementById(p.btn);
         if (panelEl && buttonEl) {
-            panelEl.innerHTML = `<div class="popup-header flex items-center justify-between p-2 border-b border-gray-700"><h3 class="font-bold text-base ml-2">${p.title}</h3><button class="close-panel-btn p-1 rounded-md hover:bg-gray-700"><svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg></button></div><div class="panel-content p-3 overflow-y-auto"></div><div class="resize-handle"></div>`;
+            panelEl.innerHTML = `<div class="popup-header flex items-center justify-between p-2 border-b border-gray-700"><h3 class="font-bold text-base ml-2">${p.title}</h3><button class="close-panel-btn p-1 rounded-md hover:bg-gray-700"><svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg></button></div><div class="panel-content overflow-y-auto"></div><div class="resize-handle"></div>`;
             const contentContainer = panelEl.querySelector('.panel-content');
             p.content.forEach(id => {
                 const contentEl = document.getElementById(id);
                 if (contentEl) contentContainer?.appendChild(contentEl);
             });
             makeDraggable(panelEl, '.popup-header'); makeResizable(panelEl);
-            buttonEl.addEventListener('click', () => { panelEl.classList.toggle('hidden'); buttonEl.classList.toggle('active', !panelEl.classList.contains('hidden')); });
+            
+            buttonEl.addEventListener('click', () => {
+                panelEl.classList.toggle('hidden');
+                buttonEl.classList.toggle('active', !panelEl.classList.contains('hidden'));
+                if (key === 'speed' && !panelEl.classList.contains('hidden')) {
+                    import('./results').then(m => m.populateSpeedAnalysisPanel());
+                }
+            });
             panelEl.querySelector('.close-panel-btn')?.addEventListener('click', () => { panelEl.classList.add('hidden'); buttonEl.classList.remove('active'); });
         }
     }
@@ -209,6 +220,26 @@ export function initializePanels() {
 export function goToWorkflowStep(index: number) {
     const analysis = getActiveAnalysis();
     if (!analysis || index < 0 || index > 4) return;
+    
+    // Handle completed analyses: show final state, allow editing, but don't auto-start tools.
+    if (analysis.isCompleted) {
+        // Mark all steps as done and clickable
+        document.getElementById('workflow-stepper')?.querySelectorAll<HTMLElement>('.workflow-step').forEach(stepEl => {
+            stepEl.classList.add('step-done', 'clickable');
+            stepEl.classList.remove('step-active', 'opacity-50', 'pointer-events-none');
+        });
+        // Hide all step content areas
+        document.getElementById('workflow-step-content-container')?.querySelectorAll<HTMLElement>('.step-content-item').forEach(contentEl => {
+            contentEl.classList.remove('active');
+        });
+        if (elements.workflowStepInstruction) {
+            elements.workflowStepInstruction.textContent = 'Análise concluída. Clique em uma etapa para editar.';
+        }
+        analysis.currentAnalysisStep = 4; // Visually show it's at the end
+        setMode(null); // Ensure no tool is active
+        return; // Exit before tool activation logic
+    }
+
     analysis.currentAnalysisStep = index;
     const coreStepComplete = analysis.manualDrawnPath.length > 0;
     document.getElementById('workflow-stepper')?.querySelectorAll<HTMLElement>('.workflow-step').forEach((stepEl, i) => {
@@ -222,6 +253,30 @@ export function goToWorkflowStep(index: number) {
     document.getElementById('workflow-step-content-container')?.querySelectorAll<HTMLElement>('.step-content-item').forEach(contentEl => {
         contentEl.classList.toggle('active', parseInt(contentEl.dataset.step || '-1') === index);
     });
+
+    if (elements.workflowStepInstruction) {
+        let instruction = '';
+        setMode(null);
+
+        switch (index) {
+            case 0:
+                instruction = 'Converta a imagem para 8-bit, se necessário.';
+                break;
+            case 1:
+                instruction = 'Pinte ou desenhe o contorno do núcleo do esferoide.';
+                break;
+            case 2:
+                instruction = 'Marque o ponto do halo e o ponto de migração máxima.';
+                break;
+            case 3:
+                instruction = 'Adicione ou remova as células na área de migração.';
+                break;
+            case 4:
+                instruction = 'Defina a borda externa da área de migração.';
+                break;
+        }
+        elements.workflowStepInstruction.textContent = instruction;
+    }
 }
 
 export function activateStepWorkflow() {

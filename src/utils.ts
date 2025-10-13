@@ -5,7 +5,8 @@ import { scaleBarMicrometersInput, scaleBarPixelsInput } from "./elements";
  * A collection of pure utility functions used across the application.
  */
 
-export function showToast(message: string) {
+// Fix: Updated function to accept an optional duration parameter to resolve argument mismatch error.
+export function showToast(message: string, duration = 2000) {
     const toast = document.getElementById('toast-notification');
     if (!toast) return;
     toast.textContent = message;
@@ -16,7 +17,7 @@ export function showToast(message: string) {
             toast.classList.remove('show', 'opacity-100', 'translate-y-0');
             toast.classList.add('opacity-0', '-translate-y-12');
             setTimeout(() => { toast.classList.add('hidden'); }, 500);
-        }, 2000);
+        }, duration);
     });
 }
 
@@ -80,6 +81,49 @@ export function simplifyPath(points: { x: number; y: number }[], tolerance: numb
     rdp(points, 0, points.length - 1, tolerance, simplified);
     simplified.push(points[points.length - 1]);
     return simplified;
+}
+
+// Fix: Add and export the smoothPath function, required by src/analysis.ts.
+export function smoothPath(path: { x: number; y: number }[], windowSize: number): { x: number; y: number }[] {
+    if (path.length < 3 || windowSize < 1) return path;
+
+    const smoothedPath: { x: number; y: number }[] = [];
+    // Check if the path is closed by comparing start and end points
+    const isClosed = path.length > 1 && path[0].x === path[path.length - 1].x && path[0].y === path[path.length - 1].y;
+    const pointCount = isClosed ? path.length - 1 : path.length;
+
+    if (pointCount === 0) return [];
+
+    for (let i = 0; i < pointCount; i++) {
+        let sumX = 0;
+        let sumY = 0;
+        let count = 0;
+        
+        for (let j = -windowSize; j <= windowSize; j++) {
+            let index = i + j;
+            
+            if (isClosed) {
+                // Wrap around for closed paths
+                index = (index + pointCount) % pointCount;
+            } else {
+                // Clamp to boundaries for open paths
+                index = Math.max(0, Math.min(pointCount - 1, index));
+            }
+            
+            sumX += path[index].x;
+            sumY += path[index].y;
+            count++;
+        }
+        
+        smoothedPath.push({ x: sumX / count, y: sumY / count });
+    }
+    
+    // If the original path was closed, close the smoothed path too
+    if (isClosed && smoothedPath.length > 0) {
+        smoothedPath.push({ ...smoothedPath[0] });
+    }
+    
+    return smoothedPath;
 }
 
 export function pointInPolygon(point: { x: number, y: number }, vs: { x: number, y: number }[]) {
@@ -229,6 +273,38 @@ function getPixelDataInPath(path: {x: number, y: number}[], canvas: HTMLCanvasEl
     return pixels;
 }
 
+/**
+ * Checks if an image on a canvas is grayscale by sampling pixels.
+ * @param canvas The canvas containing the image to check.
+ * @returns True if the image is likely grayscale, false otherwise.
+ */
+export function isImageGrayscale(canvas: HTMLCanvasElement): boolean {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return false;
+
+    const { width, height } = canvas;
+    const imageData = ctx.getImageData(0, 0, width, height).data;
+    
+    // Don't check every pixel for performance. Sample up to 500 pixels.
+    const numSamples = Math.min(500, width * height);
+    if (numSamples === 0) return true; // Empty image is technically grayscale
+
+    for (let i = 0; i < numSamples; i++) {
+        const x = Math.floor(Math.random() * width);
+        const y = Math.floor(Math.random() * height);
+        const index = (y * width + x) * 4;
+        const r = imageData[index];
+        const g = imageData[index + 1];
+        const b = imageData[index + 2];
+        
+        // If RGB components are not equal (within a small tolerance for artifacts), it's not grayscale.
+        if (Math.abs(r - g) > 2 || Math.abs(r - b) > 2) {
+            return false;
+        }
+    }
+    return true;
+}
+
 
 /**
  * Calculates morphological and texture indicators.
@@ -241,7 +317,8 @@ export function calculateMorphologicalMetrics(path: {x: number, y: number}[], ca
         area: 0, perimeter: 0, diameter: 0, circularity: 0, sphericity: 0,
         compactness: 0, solidity: 0, convexity: 0,
         entropy: 0, skewness: 0, kurtosis: 0, mean: 0, variance: 0,
-        meanGradient: 0, varianceGradient: 0
+        meanGradient: 0, varianceGradient: 0,
+        centroid: { x: 0, y: 0 }
     };
     
     if (path.length < 3) return defaultMetrics;
@@ -273,9 +350,18 @@ export function calculateMorphologicalMetrics(path: {x: number, y: number}[], ca
     
     let mean = 0, variance = 0, entropy = 0, skewness = 0, kurtosis = 0;
     let meanGradient = 0, varianceGradient = 0;
+    let centroid = { x: 0, y: 0 };
 
     const n = pixelValues.length;
     if (n > 0) {
+        let sumX = 0;
+        let sumY = 0;
+        pixelData.forEach(p => {
+            sumX += p.x;
+            sumY += p.y;
+        });
+        centroid = { x: sumX / n, y: sumY / n };
+
         // Mean (GL_mean)
         mean = pixelValues.reduce((sum, val) => sum + val, 0) / n;
         
@@ -319,6 +405,7 @@ export function calculateMorphologicalMetrics(path: {x: number, y: number}[], ca
                 }
             });
             
+// Fix: Complete the reduce call to calculate meanGradient and add the calculation for varianceGradient.
             if (gradients.length > 0) {
                 meanGradient = gradients.reduce((sum, val) => sum + val, 0) / gradients.length;
                 varianceGradient = gradients.reduce((sum, val) => sum + (val - meanGradient)**2, 0) / gradients.length;
@@ -326,10 +413,22 @@ export function calculateMorphologicalMetrics(path: {x: number, y: number}[], ca
         }
     }
 
-    return { 
-        area, perimeter, diameter: maxDiameter,
-        circularity, sphericity, compactness, solidity, convexity,
-        entropy, skewness, kurtosis, mean, variance,
-        meanGradient, varianceGradient
+    return {
+        area,
+        perimeter,
+        diameter: maxDiameter,
+        circularity,
+        sphericity,
+        compactness,
+        solidity,
+        convexity,
+        entropy,
+        skewness,
+        kurtosis,
+        mean,
+        variance,
+        meanGradient,
+        varianceGradient,
+        centroid
     };
 }

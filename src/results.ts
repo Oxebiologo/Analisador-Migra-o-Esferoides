@@ -1,4 +1,5 @@
-import { state, getActiveTab, getActiveAnalysis, TabState, ImageAnalysisState } from './state';
+// Fix: Import 'ImageAnalysisState' to resolve reference error.
+import { state, getActiveTab, getActiveAnalysis, TabState, createNewTab, StickerState, ImageAnalysisState } from './state';
 import * as elements from './elements';
 import { calculatePolygonArea, findContourPointAtAngle, showToast, copyToClipboard } from './utils';
 import { renderTabs, switchTab, updateCumulativeResultsDisplay } from './ui';
@@ -199,15 +200,6 @@ export function clearCumulativeResults() {
     if (activeTab) { activeTab.cumulativeResults = []; updateCumulativeResultsDisplay(); }
 }
 
-async function fileToBase64(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = error => reject(error);
-    });
-}
-
 function base64ToFile(base64: string, filename: string): File {
     const arr = base64.split(','), mimeMatch = arr[0].match(/:(.*?);/);
     if (!mimeMatch) throw new Error("Invalid base64 string");
@@ -217,138 +209,412 @@ function base64ToFile(base64: string, filename: string): File {
 }
 
 export async function saveProject() {
-    if (elements.saveProjectButton) {
-        elements.saveProjectButton.disabled = true;
-        elements.saveProjectButton.textContent = 'Salvando...';
-    }
-    try {
-        const serializableTabs = await Promise.all(state.tabs.map(async (tab) => {
-            const serializableAnalyses = await Promise.all(tab.analyses.map(async (analysis) => {
-                const { originalImage, file, ...rest } = analysis;
-                return {
-                    ...rest,
-                    fileData: await fileToBase64(file)
-                };
-            }));
-            return { ...tab, analyses: serializableAnalyses };
-        }));
-        
-        const projectData = { version: "1.4-recalc", tabs: serializableTabs, activeTabIndex: state.activeTabIndex };
-        const blob = new Blob([JSON.stringify(projectData)], { type: "application/json" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        const projectName = elements.projectNameInput.value || "meu-projeto";
-        link.download = `${projectName}.spheroidproj`;
-        link.click();
-        URL.revokeObjectURL(link.href);
-    } catch (error) { 
-        console.error("Failed to save project:", error); 
-        alert("Ocorreu um erro ao salvar o projeto."); 
-    } finally {
+    if (!elements.saveProjectButton) return;
+    elements.saveProjectButton.disabled = true;
+    elements.saveProjectButton.textContent = 'Preparando...';
+
+    // Inlined Worker Code
+    const workerCode = `
+        self.onmessage = async (event) => {
+            const { tabs } = event.data;
+
+            const fileToBase64 = (file) => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = error => reject(error);
+                });
+            };
+
+            try {
+                self.postMessage({ status: 'Convertendo imagens...' });
+                const serializableTabs = await Promise.all(tabs.map(async (tab) => {
+                    const serializableAnalyses = await Promise.all(tab.analyses.map(async (analysis) => {
+                        const { file, ...rest } = analysis;
+                        const fileData = await fileToBase64(file);
+                        return { ...rest, fileData };
+                    }));
+                    return { ...tab, analyses: serializableAnalyses };
+                }));
+
+                self.postMessage({ status: 'Gerando arquivo...' });
+                const projectData = { version: "1.5-worker", tabs: serializableTabs, activeTabIndex: event.data.activeTabIndex };
+                const blob = new Blob([JSON.stringify(projectData)], { type: "application/json" });
+                self.postMessage({ status: 'done', blob: blob });
+            } catch (error) {
+                self.postMessage({ status: 'error', error: error.message });
+            }
+        };
+    `;
+
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const workerUrl = URL.createObjectURL(blob);
+    const worker = new Worker(workerUrl);
+
+    worker.onmessage = (event) => {
+        const { status, blob, error } = event.data;
+        if (status === 'done' && blob) {
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            const projectName = elements.headerProjectNameInput.value || "meu-projeto";
+            link.download = `${projectName}.spheroidproj`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+            if (elements.saveProjectButton) {
+                elements.saveProjectButton.disabled = false;
+                elements.saveProjectButton.textContent = 'Salvar Projeto';
+            }
+            worker.terminate();
+            URL.revokeObjectURL(workerUrl);
+        } else if (status === 'error') {
+            console.error("Worker failed to save project:", error);
+            alert("Ocorreu um erro ao salvar o projeto: " + error);
+            if (elements.saveProjectButton) {
+                elements.saveProjectButton.disabled = false;
+                elements.saveProjectButton.textContent = 'Salvar Projeto';
+            }
+            worker.terminate();
+            URL.revokeObjectURL(workerUrl);
+        } else if (status) {
+            if (elements.saveProjectButton) elements.saveProjectButton.textContent = status;
+        }
+    };
+
+    worker.onerror = (err) => {
+        console.error("Worker error:", err);
+        alert("Falha ao iniciar o processo de salvamento em segundo plano.");
         if (elements.saveProjectButton) {
             elements.saveProjectButton.disabled = false;
             elements.saveProjectButton.textContent = 'Salvar Projeto';
         }
+         worker.terminate();
+         URL.revokeObjectURL(workerUrl);
+    };
+
+    const tabsForWorker = state.tabs.map(tab => ({
+        ...tab,
+        analyses: tab.analyses.map(analysis => {
+            const { originalImage, ...rest } = analysis;
+            return rest;
+        })
+    }));
+
+    const dataToSend = {
+        tabs: tabsForWorker,
+        activeTabIndex: state.activeTabIndex
+    };
+    
+    worker.postMessage(dataToSend);
+}
+
+async function executeLoadProject(projectData: any, file: File) {
+    const recalculatingOverlay = document.getElementById('recalculating-overlay');
+    if (recalculatingOverlay) recalculatingOverlay.classList.remove('hidden');
+
+    try {
+        state.tabs = [];
+        state.nextTabId = 0;
+        state.nextStickerId = 0;
+        
+        await executeImportTabs(projectData.tabs);
+
+        if (elements.headerProjectNameInput) {
+            const newName = file.name.replace('.spheroidproj', '');
+            elements.headerProjectNameInput.value = newName;
+        }
+        
+        // Find the correct index for the originally active tab
+        const originalActiveTabId = projectData.tabs[projectData.activeTabIndex]?.id;
+        let newActiveIndex = 0;
+        if (originalActiveTabId !== undefined) {
+            const foundIndex = state.tabs.findIndex(t => t.id === originalActiveTabId);
+            if (foundIndex > -1) {
+                newActiveIndex = foundIndex;
+            }
+        }
+
+        renderTabs();
+        switchTab(newActiveIndex, true);
+    } catch (error) {
+        console.error("Failed to execute load project:", error);
+        showToast("Erro ao processar abas selecionadas.", 5000);
+    } finally {
+        if (recalculatingOverlay) recalculatingOverlay.classList.add('hidden');
     }
 }
 
-export function loadProject(file: File) {
-    const reader = new FileReader();
-    reader.onload = async (e) => { // Make this async
-        const recalculatingOverlay = document.getElementById('recalculating-overlay');
+
+async function executeImportTabs(tabsToImport: any[]) {
+    if (!tabsToImport || tabsToImport.length === 0) return;
+
+    for (const tabData of tabsToImport) {
+        const newTab = createNewTab(); // Gets a new ID
         
-        // Temporarily store old state to avoid side effects in case of failure
-        const oldTabs = state.tabs;
-        const oldActiveIndex = state.activeTabIndex;
+        // Copy all saved properties from the file data to the new TabState instance.
+        // This includes 'name', 'currentAnalysisIndex', etc. but also 'analyses' as plain objects.
+        Object.assign(newTab, tabData);
 
-        try {
-            const projectData = JSON.parse(e.target?.result as string);
-            if (!projectData.version || !projectData.tabs) throw new Error("Formato inválido.");
+        // We must re-create the 'analyses' and 'stickers' arrays with proper class instances.
+        const analysesData = tabData.analyses || [];
+        const stickersData = tabData.stickers || [];
+        
+        newTab.analyses = [];
+        newTab.stickers = [];
 
-            if (recalculatingOverlay) recalculatingOverlay.classList.remove('hidden');
+        // Restore stickers into StickerState instances
+        for (const sData of stickersData) {
+            const sticker = new StickerState(sData.id, sData.zIndex);
+            Object.assign(sticker, sData);
+            newTab.stickers.push(sticker);
+            if (sData.id >= state.nextStickerId) state.nextStickerId = sData.id + 1;
+        }
 
-            // Load data structure
-            state.tabs = projectData.tabs.map((tabData: any) => {
-                const newTab = new TabState(tabData.id, tabData.name);
-                newTab.analyses = tabData.analyses.map((analysisData: any) => {
-                    const imageFile = base64ToFile(analysisData.fileData, analysisData.originalFilename);
-                    const analysis = new ImageAnalysisState(imageFile);
-                    Object.assign(analysis, { ...analysisData, file: imageFile, originalImage: null });
-                    return analysis;
-                });
-                newTab.currentAnalysisIndex = tabData.currentAnalysisIndex;
-                newTab.stickers = tabData.stickers || [];
-                // Do not load cumulative results, they will be rebuilt.
-                return newTab;
-            });
-            
-            // --- RECALCULATION LOOP ---
-            for (let i = 0; i < state.tabs.length; i++) {
-                const tab = state.tabs[i];
-                tab.cumulativeResults = []; // Clear old results
-                
-                for (let j = 0; j < tab.analyses.length; j++) {
-                    const analysis = tab.analyses[j];
+        // Restore analyses into ImageAnalysisState instances
+        for (const analysisData of analysesData) {
+            if (analysisData.fileData) {
+                try {
+                    const file = base64ToFile(analysisData.fileData, analysisData.originalFilename);
+                    const analysis = new ImageAnalysisState(file);
                     
-                    try {
-                        // Set this as the "active" analysis for the global functions to work
-                        state.activeTabIndex = i;
-                        tab.currentAnalysisIndex = j;
-
-                        // Load image data in background
-                        const image = await loadImagePromise(analysis.file);
-                        analysis.originalImage = image;
-
-                        // Set up canvases
-                        elements.allCanvases.forEach(c => {
-                            if(c) { c.width = image.width; c.height = image.height; }
-                        });
-                        elements.originalCanvas.getContext('2d')?.drawImage(image, 0, 0);
-
-                        applyImageFilters(analysis);
-                        
-                        // Only run analysis if there's a contour to analyze
-                        if (analysis.manualDrawnPath && analysis.manualDrawnPath.length > 2) {
-                            analyzeSpheroid(); 
-                            calculateAndStoreMigrationMetrics();
-                        }
-
-                        // Add to cumulative results (addToCumulativeResults checks if analysis was done)
-                        analysis.isCurrentAnalysisSaved = false; // Force it to be addable
-                        addToCumulativeResults();
-
-                    } catch (analysisError) {
-                        console.error(`Failed to recalculate analysis for ${analysis.originalFilename}:`, analysisError);
-                    }
+                    // Copy all saved properties from the loaded data into the new instance.
+                    // We exclude 'fileData' itself, as it has been converted to a 'file' object.
+                    const { fileData, ...restOfAnalysisData } = analysisData;
+                    Object.assign(analysis, restOfAnalysisData);
+                    
+                    newTab.analyses.push(analysis);
+                } catch (e) {
+                    console.error(`Error processing file ${analysisData.originalFilename} for tab ${tabData.name}:`, e);
                 }
             }
-            // --- END RECALCULATION ---
-
-            // Restore final active state and refresh UI
-            state.activeTabIndex = projectData.activeTabIndex ?? 0;
-            const finalActiveTab = getActiveTab();
-            if (finalActiveTab) {
-                finalActiveTab.currentAnalysisIndex = projectData.tabs[state.activeTabIndex]?.currentAnalysisIndex ?? 0;
-            }
-            
-            if (elements.projectNameInput && elements.headerProjectNameInput) {
-                const newName = file.name.replace('.spheroidproj', '');
-                elements.projectNameInput.value = newName;
-                elements.headerProjectNameInput.value = newName;
-            }
-            
-            renderTabs();
-            switchTab(state.activeTabIndex, true); // Force full refresh
-
-        } catch (error) { 
-            console.error("Failed to load and recalculate project:", error); 
-            alert("Erro ao carregar o projeto. O arquivo pode estar corrompido ou em um formato antigo."); 
-            // Restore old state on failure
-            state.tabs = oldTabs;
-            state.activeTabIndex = oldActiveIndex;
-        } finally {
-            if (recalculatingOverlay) recalculatingOverlay.classList.add('hidden');
         }
-    };
-    reader.readAsText(file);
+        
+        state.tabs.push(newTab);
+    }
+}
+
+export async function loadProject(file: File, projectData: any, mode: 'replace' | 'add') {
+    if (!file || !projectData || !projectData.tabs) return;
+
+    try {
+        if (mode === 'replace') {
+            await executeLoadProject(projectData, file);
+        } else { // mode === 'add'
+            const recalculatingOverlay = document.getElementById('recalculating-overlay');
+            if (recalculatingOverlay) recalculatingOverlay.classList.remove('hidden');
+            try {
+                await executeImportTabs(projectData.tabs);
+                renderTabs();
+                // Switch to the first of the newly added tabs.
+                switchTab(state.tabs.length - projectData.tabs.length);
+            } finally {
+                if (recalculatingOverlay) recalculatingOverlay.classList.add('hidden');
+            }
+        }
+    } catch (e) {
+        console.error("Falha ao carregar o projeto:", e);
+        showToast("Arquivo de projeto inválido ou corrompido.", 5000);
+    }
+}
+
+export function populateSpeedAnalysisPanel() {
+    const panel = elements.speedAnalysisPanel;
+    if (!panel) return;
+
+    const sourceDataContainer = panel.querySelector<HTMLElement>('#speed-analysis-source-data');
+    const resultsContainer = panel.querySelector<HTMLElement>('#speed-analysis-results');
+    const tabsSelectionContainer = panel.querySelector<HTMLElement>('#speed-analysis-tab-selection');
+    
+    if (!sourceDataContainer || !resultsContainer || !tabsSelectionContainer) return;
+    
+    // 1. Populate Tab Selection
+    tabsSelectionContainer.innerHTML = state.tabs.map((tab, i) => `
+        <label class="flex items-center space-x-2 p-1.5 rounded-md hover:bg-gray-700/50 cursor-pointer">
+            <input type="checkbox" data-tab-index="${i}" class="speed-tab-checkbox w-4 h-4 text-teal-500 bg-gray-700 border-gray-600 rounded focus:ring-teal-500">
+            <span class="text-sm truncate" title="${tab.name}">${tab.name}</span>
+        </label>
+    `).join('') || '<p class="text-xs text-gray-500 p-2">Nenhuma aba disponível.</p>';
+
+    // Event listener for tab checkboxes
+    tabsSelectionContainer.addEventListener('change', () => {
+        const selectedIndexes = Array.from(tabsSelectionContainer.querySelectorAll<HTMLInputElement>('.speed-tab-checkbox:checked')).map(cb => parseInt(cb.dataset.tabIndex || '-1'));
+        const sourceData = selectedIndexes.flatMap(i => state.tabs[i].cumulativeResults.map(r => ({ ...r, tabName: state.tabs[i].name }))).sort((a,b) => a.filename.localeCompare(b.filename));
+
+        sourceDataContainer.innerHTML = `
+            <table class="w-full text-xs">
+                <thead class="bg-gray-700/50 sticky top-0 backdrop-blur-sm"><tr>
+                    <th class="p-2 text-left">Aba</th><th class="p-2 text-left">Arquivo</th><th class="p-2 text-center w-24">Tempo (dias)</th>
+                </tr></thead>
+                <tbody>${sourceData.map((row, idx) => `
+                    <tr class="border-t border-gray-700/50" data-row-index="${idx}">
+                        <td class="p-2 truncate" title="${row.tabName}">${row.tabName}</td>
+                        <td class="p-2 truncate" title="${row.filename}">${row.filename}</td>
+                        <td contenteditable="true" class="p-2 text-center font-mono time-input bg-gray-800/50"></td>
+                    </tr>
+                `).join('')}</tbody>
+            </table>
+        `;
+    });
+
+    const calculateBtn = panel.querySelector('#calculate-speeds-btn');
+    calculateBtn?.addEventListener('click', () => {
+        if (!sourceDataContainer || !tabsSelectionContainer || !resultsContainer) return;
+        
+        const timeInputs = Array.from(sourceDataContainer.querySelectorAll<HTMLElement>('.time-input'));
+        const selectedIndexes = Array.from(tabsSelectionContainer.querySelectorAll<HTMLInputElement>('.speed-tab-checkbox:checked')).map(cb => parseInt(cb.dataset.tabIndex || '-1'));
+        const sourceData = selectedIndexes.flatMap(i => state.tabs[i].cumulativeResults.map(r => ({ ...r, tabName: state.tabs[i].name }))).sort((a,b) => a.filename.localeCompare(b.filename));
+
+        const dataWithTime = sourceData.map((row, i) => ({
+            ...row,
+            time: parseFloat(timeInputs[i].innerText.replace(',', '.'))
+        })).filter(row => !isNaN(row.time));
+
+        const analysisMode = (panel.querySelector<HTMLInputElement>('input[name="speed-analysis-mode"]:checked')?.value) || 'within-tabs';
+
+        resultsContainer.innerHTML = '';
+        resultsContainer.classList.remove('hidden');
+
+        const calculateAndRenderSpeeds = (data: any[], title: string) => {
+            const sortedData = data.sort((a, b) => a.time - b.time);
+            if (sortedData.length < 2) return false;
+    
+            const r1 = sortedData[0];
+            const r2 = sortedData[sortedData.length - 1];
+            const timeDiff = r2.time - r1.time;
+    
+            if (timeDiff <= 0) return false;
+    
+            const areaDiff = parseFloat(r2.migrationArea_um2) - parseFloat(r1.migrationArea_um2);
+            const cellDiff = r2.cellCount - r1.cellCount;
+            const spheroidGrowth = parseFloat(r2.coreRadius_um) - parseFloat(r1.coreRadius_um);
+            const maxMigrationDiff = parseFloat(r2.maxMigration_um) - parseFloat(r1.maxMigration_um);
+            const haloMigrationDiff = parseFloat(r2.haloMigration_um) - parseFloat(r1.haloMigration_um);
+    
+            const migrationSpeedArea = areaDiff / timeDiff;
+            const proliferationSpeed = cellDiff / timeDiff;
+            const spheroidGrowthSpeed = spheroidGrowth / timeDiff;
+            const maxMigrationSpeed = maxMigrationDiff / timeDiff;
+            const haloMigrationSpeed = haloMigrationDiff / timeDiff;
+    
+            const resultEl = document.createElement('div');
+            resultEl.className = 'bg-gray-800/50 p-2 rounded-md text-xs';
+            resultEl.innerHTML = `
+                <h4 class="font-semibold text-teal-400">${title} (Δt = ${timeDiff.toFixed(1)} dias)</h4>
+                <div class="mt-1 space-y-1">
+                    <div class="flex justify-between"><span>Vel. Crescimento (Raio):</span><span class="font-mono">${spheroidGrowthSpeed.toFixed(1)} µm/dia</span></div>
+                    <div class="flex justify-between"><span>Vel. Migração (Halo):</span><span class="font-mono">${haloMigrationSpeed.toFixed(1)} µm/dia</span></div>
+                    <div class="flex justify-between"><span>Vel. Migração (Máx):</span><span class="font-mono">${maxMigrationSpeed.toFixed(1)} µm/dia</span></div>
+                    <div class="flex justify-between pt-1 mt-1 border-t border-gray-700/50"><span>Vel. Migração (Área):</span><span class="font-mono">${migrationSpeedArea.toFixed(0)} µm²/dia</span></div>
+                    <div class="flex justify-between"><span>Vel. Proliferação (Células):</span><span class="font-mono">${proliferationSpeed.toFixed(0)} células/dia</span></div>
+                </div>
+            `;
+            resultsContainer.appendChild(resultEl);
+            return true;
+        };
+    
+        let calculationsSucceeded = false;
+    
+        if (analysisMode === 'within-tabs') {
+            const groupedByTab = dataWithTime.reduce((acc, row) => {
+                acc[row.tabName] = acc[row.tabName] || [];
+                acc[row.tabName].push(row);
+                return acc;
+            }, {} as Record<string, any[]>);
+    
+            for (const tabName in groupedByTab) {
+                const success = calculateAndRenderSpeeds(groupedByTab[tabName], tabName);
+                if (success) calculationsSucceeded = true;
+            }
+        } else { // 'all-together' mode
+            calculationsSucceeded = calculateAndRenderSpeeds(dataWithTime, 'Resultado Combinado');
+        }
+    
+        if (!calculationsSucceeded) {
+            resultsContainer.innerHTML = '<p class="text-xs text-amber-400 p-2">Dados insuficientes ou intervalo de tempo inválido para calcular velocidades.</p>';
+        }
+    });
+
+
+    // Paste data logic
+    const pasteArea = panel.querySelector<HTMLTextAreaElement>('#paste-data-area');
+    const loadPastedBtn = panel.querySelector<HTMLButtonElement>('#load-pasted-data-btn');
+
+    loadPastedBtn?.addEventListener('click', () => {
+        if (!sourceDataContainer || !pasteArea) return;
+        const text = pasteArea.value.trim();
+        if (!text) return;
+
+        const rows = text.split('\n').map(r => r.split('\t'));
+        if (rows.length === 0) return;
+
+        const allTableRows = Array.from(sourceDataContainer.querySelectorAll<HTMLElement>('tr[data-row-index]'));
+        if (allTableRows.length === 0) {
+            showToast("Primeiro selecione as abas para carregar a tabela de arquivos.", 4000);
+            return;
+        }
+
+        let filenameIndex = 0; // default to first column
+        let timeIndex = 1; // default to second column
+        let foundFilenameInHeader = false;
+        let foundTimeInHeader = false;
+
+        const header = rows[0];
+        // A simple heuristic: if the first cell of the first row contains "arquivo" or "file", it's a header.
+        if (header.length > 0 && (header[0].toLowerCase().includes('arquivo') || header[0].toLowerCase().includes('file'))) {
+            header.forEach((col, i) => {
+                const lowerCol = col.toLowerCase().trim();
+                if (lowerCol.includes('arquivo') || lowerCol.includes('file')) {
+                    filenameIndex = i;
+                    foundFilenameInHeader = true;
+                }
+                if (lowerCol.includes('tempo') || lowerCol.includes('time') || lowerCol.includes('dias') || lowerCol.includes('days')) {
+                    timeIndex = i;
+                    foundTimeInHeader = true;
+                }
+            });
+        }
+        
+        const hasHeader = foundFilenameInHeader || foundTimeInHeader;
+        const dataRows = hasHeader ? rows.slice(1) : rows;
+
+        const pastedDataMap = new Map<string, string>();
+        dataRows.forEach(row => {
+            if (row.length > filenameIndex && row.length > timeIndex) {
+                const filename = row[filenameIndex].trim();
+                const time = row[timeIndex].trim();
+                if (filename && time && !isNaN(parseFloat(time.replace(',', '.')))) {
+                    pastedDataMap.set(filename, time);
+                }
+            }
+        });
+
+        if (pastedDataMap.size === 0) {
+            if (foundFilenameInHeader && !foundTimeInHeader) {
+                showToast("Coluna 'Tempo' não encontrada. Adicione esta coluna na sua planilha antes de colar.", 6000);
+            } else {
+                showToast("Formato de dados inválido. Cole uma tabela com colunas 'Arquivo' e 'Tempo'.", 5000);
+            }
+            return;
+        }
+
+        let matchCount = 0;
+        allTableRows.forEach(tableRow => {
+            const filenameCell = tableRow.querySelector<HTMLElement>('td:nth-child(2)');
+            const timeInputCell = tableRow.querySelector<HTMLElement>('.time-input');
+            if (filenameCell && timeInputCell) {
+                const filenameInTable = filenameCell.getAttribute('title') || filenameCell.innerText;
+                if (pastedDataMap.has(filenameInTable)) {
+                    timeInputCell.innerText = pastedDataMap.get(filenameInTable)!.replace('.', ',');
+                    matchCount++;
+                }
+            }
+        });
+
+        if (matchCount > 0) {
+            showToast(`${matchCount} tempos foram carregados com sucesso.`, 3000);
+            pasteArea.value = '';
+        } else {
+            showToast("Nenhum nome de arquivo na tabela corresponde aos nomes no texto colado.", 4000);
+        }
+    });
 }

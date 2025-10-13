@@ -1,10 +1,15 @@
+
+
+
+
+
 import * as elements from './elements';
 import { state, getActiveTab, getActiveAnalysis, StickerState } from './state';
 import { requestRedraw, resetView, zoomTo, getMousePos, paintOnCanvas } from './canvas';
 import { applyImageFilters, handleFiles, loadImageByIndex, resetImageAdjustments, deleteCurrentImage } from './image';
-import { setMode, updateUIMode, initializePanels, syncCheckboxes, completeStepAndAdvance, switchTab, addNewTab, deleteTab, renderTabs, updateFullscreenButton, renameTab, renderStickers, updateCellCounters, goToWorkflowStep, minimizePanel, restorePanel, makeDraggable } from './ui';
-import { analyzeSpheroid, refineContour, runMagicWand, processPaintedSpheroid, processPaintedMargin } from './analysis';
-import { addToCumulativeResults, clearCumulativeResults, copyCumulativeCsv, saveCumulativeCsv, openInSheets, deleteCumulativeResult, saveProject, loadProject, updateResultsDisplay, calculateAndStoreMigrationMetrics } from './results';
+import { setMode, updateUIMode, initializePanels, syncCheckboxes, completeStepAndAdvance, switchTab, addNewTab, deleteTab, renderTabs, updateFullscreenButton, renameTab, renderStickers, updateCellCounters, goToWorkflowStep, minimizePanel, restorePanel, makeDraggable, renderMinimizedPanels } from './ui';
+import { analyzeSpheroid, refineContour, runMagicWand, processPaintedSpheroid, processPaintedMargin, pushToHistory, handleSpheroidEdit } from './analysis';
+import { addToCumulativeResults, clearCumulativeResults, copyCumulativeCsv, saveCumulativeCsv, openInSheets, deleteCumulativeResult, saveProject, loadProject, updateResultsDisplay, calculateAndStoreMigrationMetrics, populateSpeedAnalysisPanel } from './results';
 import { handleGlobalKeyDown } from './shortcuts';
 import { isPointInEllipse, simplifyPath, debounce, createParticleFromPixels, isCellPositionValid, showToast } from './utils';
 
@@ -12,6 +17,15 @@ const requestFilterAndRedraw = debounce(() => {
     const analysis = getActiveAnalysis();
     if(analysis) applyImageFilters(analysis); 
 }, 250);
+
+function updateBrushToolsUI() {
+    if (!elements.brushToolPaint || !elements.brushToolErase) return;
+    elements.brushToolPaint.classList.toggle('active', !state.isErasing);
+    elements.brushToolErase.classList.toggle('active', state.isErasing);
+}
+
+let tempProjectFileForLoad: File | null = null;
+let tempProjectDataForLoad: any = null;
 
 /**
  * Initializes all event listeners for the application.
@@ -29,33 +43,108 @@ export function initializeEventListeners() {
 
     elements.newProjectButton?.addEventListener('click', () => {
         if (confirm('Tem certeza que deseja criar um novo projeto? Todas as abas e dados não salvos serão perdidos.')) {
+            // This is a full reset.
+            
+            // 1. Reset core state
             state.tabs = [];
+            state.activeTabIndex = -1;
+            state.nextTabId = 0;
+            state.nextStickerId = 0;
+            state.minimizedPanels = [];
+    
+            // 2. Reset UI
+            // Close all floating panels and deactivate header buttons
+            elements.allPopupPanels.forEach(panel => {
+                if (panel) panel.classList.add('hidden');
+            });
+            document.querySelectorAll('header .popup-button.active').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Reset project name to the default from the HTML
+            const defaultProjectName = 'Analisador de Migração';
+            if (elements.headerProjectNameInput) elements.headerProjectNameInput.value = defaultProjectName;
+    
+            // 3. Add a fresh new tab. This will call switchTab and reset the main view.
             addNewTab();
-            const newProjectName = 'Novo Projeto';
-            if (elements.projectNameInput) elements.projectNameInput.value = newProjectName;
-            if (elements.headerProjectNameInput) elements.headerProjectNameInput.value = newProjectName;
+            renderMinimizedPanels(); // Clear the minimized bar
         }
     });
 
     elements.saveProjectButton?.addEventListener('click', saveProject);
-    elements.loadProjectInput?.addEventListener('change', (e) => {
+    
+    function showTabSelectionForLoad(file: File, projectData: any) {
+        tempProjectFileForLoad = file;
+        tempProjectDataForLoad = projectData;
+    
+        const { tabSelectionModal, tabSelectionList, tabSelectAll } = elements;
+        if (!tabSelectionModal || !tabSelectionList || !tabSelectAll) return;
+    
+        tabSelectionList.innerHTML = '';
+        projectData.tabs.forEach((tab: any, index: number) => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <label class="flex items-center space-x-3 p-2 rounded-md hover:bg-gray-700/50 cursor-pointer">
+                    <input type="checkbox" data-index="${index}" class="tab-select-checkbox w-5 h-5 text-teal-500 bg-gray-700 border-gray-600 rounded focus:ring-teal-500" checked>
+                    <span class="truncate" title="${tab.name}">${tab.name}</span>
+                </label>
+            `;
+            tabSelectionList.appendChild(li);
+        });
+        
+        tabSelectAll.checked = true;
+        tabSelectAll.onchange = () => {
+            tabSelectionList.querySelectorAll<HTMLInputElement>('.tab-select-checkbox').forEach(cb => cb.checked = tabSelectAll.checked);
+        };
+    
+        tabSelectionModal.classList.remove('hidden');
+    }
+
+    elements.loadProjectInput?.addEventListener('change', async (e) => {
         const file = (e.target as HTMLInputElement).files?.[0];
-        if (file) loadProject(file);
-    });
-
-    elements.projectNameInput?.addEventListener('input', () => {
-        if (elements.headerProjectNameInput) elements.headerProjectNameInput.value = elements.projectNameInput.value;
-    });
-    elements.headerProjectNameInput?.addEventListener('input', () => {
-        if (elements.projectNameInput) elements.projectNameInput.value = elements.headerProjectNameInput.value;
-    });
-
-    elements.resetButton?.addEventListener('click', () => {
-        const analysis = getActiveAnalysis();
-        const activeTab = getActiveTab();
-        if (analysis && analysis.originalImage && activeTab) {
-            loadImageByIndex(activeTab.currentAnalysisIndex);
+        if (!file) return;
+    
+        try {
+            const content = await file.text();
+            const projectData = JSON.parse(content);
+            if (!projectData.tabs) throw new Error("Formato de projeto inválido.");
+            showTabSelectionForLoad(file, projectData);
+        } catch (err) {
+            console.error("Falha ao ler o arquivo de projeto:", err);
+            showToast("Arquivo de projeto inválido ou corrompido.", 5000);
         }
+        (e.target as HTMLInputElement).value = '';
+    });
+
+    const closeTabSelectionModal = () => {
+        if (elements.tabSelectionModal) elements.tabSelectionModal.classList.add('hidden');
+        tempProjectFileForLoad = null;
+        tempProjectDataForLoad = null;
+    };
+    
+    const handleTabSelectionConfirm = (mode: 'replace' | 'add') => {
+        const { tabSelectionModal, tabSelectionList } = elements;
+        if (!tabSelectionModal || !tabSelectionList || !tempProjectFileForLoad || !tempProjectDataForLoad) return;
+    
+        const selectedIndexes = Array.from(tabSelectionList.querySelectorAll<HTMLInputElement>('.tab-select-checkbox:checked')).map(cb => parseInt(cb.dataset.index || '-1'));
+        const selectedTabs = tempProjectDataForLoad.tabs.filter((_: any, i: number) => selectedIndexes.includes(i));
+        
+        if (selectedTabs.length > 0) {
+            const projectDataWithSelection = { ...tempProjectDataForLoad, tabs: selectedTabs };
+            loadProject(tempProjectFileForLoad!, projectDataWithSelection, mode);
+        }
+        
+        closeTabSelectionModal();
+    };
+    
+    elements.tabSelectReplaceBtn?.addEventListener('click', () => handleTabSelectionConfirm('replace'));
+    elements.tabSelectAddBtn?.addEventListener('click', () => handleTabSelectionConfirm('add'));
+    elements.tabSelectCancel?.addEventListener('click', closeTabSelectionModal);
+
+
+    elements.headerProjectNameInput?.addEventListener('input', () => {
+        const activeTab = getActiveTab();
+        if(activeTab) activeTab.name = elements.headerProjectNameInput.value;
     });
 
     elements.saveAnalyzedButton?.addEventListener('click', () => {
@@ -103,6 +192,36 @@ export function initializeEventListeners() {
     syncSliderAndNumber('blacksInput', 'blacksNumber');
     syncSliderAndNumber('backgroundToleranceInput', 'backgroundToleranceNumber');
     syncSliderAndNumber('binaryThresholdInput', 'binaryThresholdNumber');
+    syncSliderAndNumber('magicWandToleranceInput', 'magicWandToleranceNumber');
+    syncSliderAndNumber('aiToleranceInput', 'aiToleranceNumber');
+
+    // Sync for brush controls which doesn't need a filter redraw
+    elements.brushSizeInput?.addEventListener('input', () => {
+        if (elements.brushSizeNumber) elements.brushSizeNumber.value = elements.brushSizeInput.value;
+    });
+    elements.brushSizeNumber?.addEventListener('change', () => {
+        if (elements.brushSizeInput) elements.brushSizeInput.value = elements.brushSizeNumber.value;
+    });
+
+    // Sync for brush opacity controls and trigger redraw
+    elements.brushOpacityInput?.addEventListener('input', () => {
+        if (elements.brushOpacityNumber) elements.brushOpacityNumber.value = elements.brushOpacityInput.value;
+        requestRedraw();
+    });
+    elements.brushOpacityNumber?.addEventListener('change', () => {
+        if (elements.brushOpacityInput) elements.brushOpacityInput.value = elements.brushOpacityNumber.value;
+        requestRedraw();
+    });
+    
+    // Real-time border refinement
+    const debouncedRefine = debounce(refineContour, 250);
+    elements.aiToleranceInput?.addEventListener('input', () => {
+        const analysis = getActiveAnalysis();
+        // Only run if there is a contour to refine
+        if (analysis && analysis.manualDrawnPath.length > 2) {
+            debouncedRefine();
+        }
+    });
 
     elements.resetAdjustmentsButton?.addEventListener('click', () => { resetImageAdjustments(); requestFilterAndRedraw(); });
 
@@ -120,7 +239,7 @@ export function initializeEventListeners() {
         applyImageFilters(analysis);
         if (elements.bitStatus) {
             elements.bitStatus.textContent = '8-bit';
-            elements.bitStatus.className += ' bg-teal-500/80 text-white';
+            elements.bitStatus.className = 'text-xs font-bold ml-auto px-2 py-0.5 rounded-full bg-teal-500/80 text-white';
         }
         (elements.convertTo8BitButton as HTMLButtonElement).disabled = true;
         [elements.paintSpheroidButton, elements.drawSpheroidButton, elements.magicPaintButton, elements.undoPointButton].forEach(b => { if (b) (b as HTMLButtonElement).disabled = false });
@@ -131,8 +250,43 @@ export function initializeEventListeners() {
         if (btn) btn.addEventListener('click', () => setMode((btn as HTMLElement).dataset.mode));
     });
 
-    elements.paintSpheroidButton?.addEventListener('click', () => { setMode(null); state.paintModeContext = 'spheroid'; updateUIMode(); });
-    elements.paintMarginButton?.addEventListener('click', () => { setMode(null); state.paintModeContext = 'margin'; updateUIMode(); });
+    elements.paintSpheroidButton?.addEventListener('click', () => {
+        setMode(null);
+        state.paintModeContext = 'spheroid';
+        state.isErasing = false;
+    
+        // Convert existing contour to a paintable area for intuitive editing
+        const analysis = getActiveAnalysis();
+        if (analysis && analysis.manualDrawnPath.length > 0) {
+            const paintCtx = elements.paintSpheroidCanvas.getContext('2d');
+            if (paintCtx) {
+                paintCtx.clearRect(0, 0, elements.paintSpheroidCanvas.width, elements.paintSpheroidCanvas.height);
+                paintCtx.beginPath();
+                paintCtx.moveTo(analysis.manualDrawnPath[0].x, analysis.manualDrawnPath[0].y);
+                analysis.manualDrawnPath.forEach(p => paintCtx.lineTo(p.x, p.y));
+                paintCtx.closePath();
+                // Use a solid, visible color for the editable area
+                paintCtx.fillStyle = '#2DD4BF'; // A solid teal color
+                paintCtx.fill();
+    
+                // Clear the old path so it isn't drawn simultaneously
+                analysis.manualDrawnPath = [];
+                requestRedraw();
+            }
+        }
+    
+        updateBrushToolsUI();
+        updateUIMode();
+    });
+    
+    elements.paintMarginButton?.addEventListener('click', () => { 
+        setMode(null); 
+        state.paintModeContext = 'margin'; 
+        state.isErasing = false;
+        updateBrushToolsUI();
+        updateUIMode(); 
+    });
+
     elements.selectBackgroundButton?.addEventListener('click', () => setMode('selectBackground'));
     elements.refineContourButton?.addEventListener('click', refineContour);
     elements.smoothMarginButton?.addEventListener('click', () => {
@@ -141,6 +295,7 @@ export function initializeEventListeners() {
         analysis.migrationMarginPath = simplifyPath(analysis.migrationMarginPath, 5);
         requestRedraw();
         updateResultsDisplay();
+        pushToHistory();
     });
 
     elements.undoPointButton?.addEventListener('click', () => {
@@ -158,6 +313,7 @@ export function initializeEventListeners() {
         requestRedraw();
         updateUIMode();
         [elements.setHaloPointButton, elements.setMigrationPointButton, elements.refineContourButton, elements.drawMarginButton, elements.smoothMarginButton, elements.paintMarginButton, elements.clearMarginButton].forEach(b => { if (b) (b as HTMLButtonElement).disabled = true; });
+        pushToHistory();
     });
 
     elements.clearMarginButton?.addEventListener('click', () => {
@@ -166,6 +322,7 @@ export function initializeEventListeners() {
         requestRedraw();
         updateResultsDisplay();
         updateUIMode();
+        pushToHistory();
     });
 
     elements.addCellButton?.addEventListener('click', () => setMode('addCell'));
@@ -177,6 +334,7 @@ export function initializeEventListeners() {
         state.isPaintLayerDirty = true;
         updateCellCounters();
         requestRedraw();
+        pushToHistory();
     });
 
     elements.confirmCellCountButton?.addEventListener('click', () => {
@@ -186,78 +344,234 @@ export function initializeEventListeners() {
         updateResultsDisplay();
         showToast('Contagem de células confirmada!');
         completeStepAndAdvance();
+        pushToHistory();
     });
 
     elements.confirmAnalysisButton?.addEventListener('click', () => {
-        addToCumulativeResults();
+        const analysis = getActiveAnalysis();
+        if (!analysis) return;
+    
+        addToCumulativeResults(); // This saves the results
+        analysis.isCompleted = true;
+        analysis.currentAnalysisStep = 4; // Ensure it's marked as on the last step
+    
         showToast('Análise concluída e registrada!');
+        
+        // Hide the panel and deactivate the button
         if (elements.analysisWorkflowPanel) {
             elements.analysisWorkflowPanel.classList.add('hidden');
             document.getElementById('header-analysis-btn')?.classList.remove('active');
         }
-        goToWorkflowStep(0);
+        
+        // Refresh the UI to reflect the "completed" state without activating tools
+        goToWorkflowStep(4);
     });
 
     if (elements.resultCanvas) {
-        elements.resultCanvas.addEventListener('mousedown', (e) => {
-            e.preventDefault();
+        const getCanvasPos = (clientX: number, clientY: number) => {
+            if (!elements.canvasContainer) return { x: 0, y: 0 };
+            const rect = elements.canvasContainer.getBoundingClientRect();
+            return {
+                x: (clientX - rect.left - state.pan.x) / state.zoom,
+                y: (clientY - rect.top - state.pan.y) / state.zoom
+            };
+        };
+
+        const onPointerDown = (clientX: number, clientY: number, isCtrl: boolean) => {
             const analysis = getActiveAnalysis();
-            if (!analysis || e.button !== 0) return;
+            if (!analysis) return;
+
+            if (isCtrl || (!state.currentMode && !state.paintModeContext)) {
+                state.isPanning = true;
+                state.panStart = { x: clientX - state.pan.x, y: clientY - state.pan.y };
+                elements.resultCanvas!.style.cursor = 'grabbing';
+                return;
+            }
+
             state.isDrawing = true;
-            state.mouseDownPos = { x: e.clientX, y: e.clientY };
-            const pos = getMousePos(e);
+            state.mouseDownPos = { x: clientX, y: clientY };
+            const pos = getCanvasPos(clientX, clientY);
 
             if (state.paintModeContext) {
                 state.lastPaintPos = pos;
-                paintOnCanvas(state.lastPaintPos, state.lastPaintPos, elements.paintSpheroidCanvas);
+                if (state.paintModeContext === 'spheroid') handleSpheroidEdit(pos, pos);
+                else if (state.paintModeContext === 'margin') paintOnCanvas(pos, pos, elements.paintSpheroidCanvas, state.isErasing);
             } else if (state.currentMode === 'drawSpheroid') {
                 state.drawnPath = [pos];
                 analysis.manualDrawnPath = [];
             } else if (state.currentMode === 'drawMargin') {
                 state.drawnPath = [pos];
                 analysis.migrationMarginPath = [];
-            } else if (!state.currentMode) {
-                state.isPanning = true;
-                state.panStart = { x: e.clientX - state.pan.x, y: e.clientY - state.pan.y };
-                elements.resultCanvas.style.cursor = 'grabbing';
             }
-        });
+        };
 
-        elements.resultCanvas.addEventListener('mousemove', (e) => {
-            e.preventDefault();
+        const onPointerMove = (clientX: number, clientY: number) => {
             const analysis = getActiveAnalysis();
             if (!analysis) return;
-            const currentPos = getMousePos(e);
-            if (state.isDrawing) {
+            const currentPos = getCanvasPos(clientX, clientY);
+
+            if (state.isPanning) {
+                state.pan.x = clientX - state.panStart.x;
+                state.pan.y = clientY - state.panStart.y;
+                requestRedraw();
+            } else if (state.isDrawing) {
                 if (state.paintModeContext) {
-                    paintOnCanvas(state.lastPaintPos!, currentPos, elements.paintSpheroidCanvas);
+                    if (state.paintModeContext === 'spheroid') handleSpheroidEdit(state.lastPaintPos!, currentPos);
+                    else if (state.paintModeContext === 'margin') paintOnCanvas(state.lastPaintPos!, currentPos, elements.paintSpheroidCanvas, state.isErasing);
                 } else if (state.currentMode === 'drawSpheroid' || state.currentMode === 'drawMargin') {
                     state.drawnPath.push(currentPos);
-                } else if (state.isPanning) {
-                    state.pan.x = e.clientX - state.panStart.x;
-                    state.pan.y = e.clientY - state.panStart.y;
                 }
                 state.lastPaintPos = currentPos;
                 requestRedraw();
             }
+
             if (analysis.originalImage && elements.pixelInspector) {
-                const x = Math.floor(currentPos.x);
-                const y = Math.floor(currentPos.y);
+                 const x = Math.floor(currentPos.x), y = Math.floor(currentPos.y);
                 if (x >= 0 && x < analysis.originalImage.width && y >= 0 && y < analysis.originalImage.height) {
                     const ctx = elements.processedImageCanvas.getContext('2d', { willReadFrequently: true });
                     const brightness = ctx ? ctx.getImageData(x, y, 1, 1).data[0] : 0;
                     elements.pixelInspector.innerHTML = `X:${x} Y:${y} B:${255 - brightness}`;
                     elements.pixelInspector.classList.remove('hidden');
+                } else elements.pixelInspector.classList.add('hidden');
+            }
+        };
+
+        const onPointerUp = (clientX: number, clientY: number) => {
+            const analysis = getActiveAnalysis();
+            if (!analysis) return;
+            if (state.isDrawing && state.paintModeContext) pushToHistory();
+            const wasDrawing = state.isDrawing;
+            state.isDrawing = false;
+            state.lastPaintPos = null;
+
+            if ((state.currentMode === 'drawSpheroid' || state.currentMode === 'drawMargin') && wasDrawing) {
+                const simplified = simplifyPath(state.drawnPath, 1.5);
+                if (simplified.length > 3) {
+                    if (state.currentMode === 'drawSpheroid') { analysis.manualDrawnPath = [...simplified, simplified[0]]; analyzeSpheroid(); }
+                    else { analysis.migrationMarginPath = [...simplified, simplified[0]]; updateResultsDisplay(); pushToHistory(); }
                 } else {
-                    elements.pixelInspector.classList.add('hidden');
+                    if (state.currentMode === 'drawSpheroid') analysis.manualDrawnPath = []; else analysis.migrationMarginPath = [];
                 }
+                state.drawnPath = [];
+                setMode(null);
+                return;
+            }
+
+            if (state.isPanning) { state.isPanning = false; updateUIMode(); }
+            const isDrag = !state.mouseDownPos || Math.hypot(clientX - state.mouseDownPos.x, clientY - state.mouseDownPos.y) > 4;
+            state.mouseDownPos = null;
+            if (isDrag) return;
+
+            const pos = getCanvasPos(clientX, clientY);
+            switch (state.currentMode) {
+                case 'magicPaint': runMagicWand(pos); break;
+                case 'selectBackground': {
+                    const originalCtx = elements.originalCanvas.getContext('2d', { willReadFrequently: true });
+                    if (!originalCtx) return;
+                    const p = originalCtx.getImageData(Math.round(pos.x), Math.round(pos.y), 1, 1).data;
+                    state.backgroundColorToSubtract = { r: p[0], g: p[1], b: p[2] };
+                    const bgPreview = document.getElementById('backgroundColorPreview') as HTMLElement;
+                    if(bgPreview) bgPreview.style.backgroundColor = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
+                    applyImageFilters(analysis);
+                    setMode(null);
+                    break;
+                }
+                case 'removeCell': {
+                     for(let i = analysis.detectedParticles.length - 1; i >= 0; i--) { 
+                        const p = analysis.detectedParticles[i]; 
+                        if (p.ellipse && isPointInEllipse(pos, p.ellipse, 2.0)) {
+                            analysis.detectedParticles.splice(i, 1); 
+                            state.isPaintLayerDirty = true; 
+                            updateCellCounters();
+                            requestRedraw();
+                            pushToHistory();
+                            return; 
+                        } 
+                    } 
+                    break;
+                }
+                case 'addCell': {
+                    const particle = createParticleFromPixels([{x: pos.x, y: pos.y}], true);
+                    if (isCellPositionValid(particle.centroid)) {
+                        analysis.detectedParticles.push(particle);
+                        state.isPaintLayerDirty = true;
+                        updateCellCounters();
+                        requestRedraw();
+                        pushToHistory();
+                    }
+                    break;
+                }
+                case 'setMigrationPoint': {
+                    if (!analysis.lastAnalysisResult.centerX) return;
+                    const { centerX, centerY } = analysis.lastAnalysisResult;
+                    const maxRadius = Math.hypot(pos.x - centerX, pos.y - centerY);
+                    analysis.lastAnalysisResult = { ...analysis.lastAnalysisResult, maxRadius, maxRadiusData: { point: pos, angle: Math.atan2(pos.y - centerY, pos.x - centerX) } };
+                    calculateAndStoreMigrationMetrics();
+                    setMode(null);
+                    if (analysis.currentAnalysisStep === 2) {
+                        if (confirm('Concluir a definição de raios e iniciar a contagem de células?')) {
+                            completeStepAndAdvance();
+                            setMode('addCell');
+                        }
+                    }
+                    pushToHistory();
+                    break;
+                }
+                case 'setHaloPoint': {
+                    if (!analysis.lastAnalysisResult.centerX) return;
+                    const { centerX, centerY } = analysis.lastAnalysisResult;
+                    analysis.haloRadiusData = { radius: Math.hypot(pos.x - centerX, pos.y - centerY), angle: Math.atan2(pos.y - centerY, pos.x - centerX) };
+                    calculateAndStoreMigrationMetrics();
+                    setMode(null);
+                    pushToHistory();
+                    break;
+                }
+            }
+        };
+
+        // Mouse Events
+        elements.resultCanvas.addEventListener('mousedown', (e) => { e.preventDefault(); if (e.button === 0) onPointerDown(e.clientX, e.clientY, e.ctrlKey); });
+        elements.resultCanvas.addEventListener('mousemove', (e) => { e.preventDefault(); onPointerMove(e.clientX, e.clientY); });
+        window.addEventListener('mouseup', (e) => { if (e.button === 0) onPointerUp(e.clientX, e.clientY); });
+        elements.resultCanvas.addEventListener('mouseleave', () => { if (elements.pixelInspector) elements.pixelInspector.classList.add('hidden'); });
+
+        // Touch Events
+        elements.resultCanvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                onPointerDown(touch.clientX, touch.clientY, false);
+            } else if (e.touches.length === 2) { // Two-finger pan
+                state.isPanning = true;
+                const t1 = e.touches[0]; const t2 = e.touches[1];
+                const midX = (t1.clientX + t2.clientX) / 2;
+                const midY = (t1.clientY + t2.clientY) / 2;
+                state.panStart = { x: midX - state.pan.x, y: midY - state.pan.y };
+            }
+        }, { passive: false });
+
+        elements.resultCanvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (e.touches.length === 1 && (state.isDrawing || state.isPanning)) {
+                const touch = e.touches[0];
+                onPointerMove(touch.clientX, touch.clientY);
+            } else if (e.touches.length === 2 && state.isPanning) {
+                 const t1 = e.touches[0]; const t2 = e.touches[1];
+                const midX = (t1.clientX + t2.clientX) / 2;
+                const midY = (t1.clientY + t2.clientY) / 2;
+                state.pan.x = midX - state.panStart.x;
+                state.pan.y = midY - state.panStart.y;
+                requestRedraw();
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchend', (e) => {
+            if (e.touches.length === 0 && (state.isDrawing || state.isPanning)) {
+                const lastTouch = e.changedTouches[0];
+                onPointerUp(lastTouch.clientX, lastTouch.clientY);
             }
         });
         
-        elements.resultCanvas.addEventListener('mouseleave', () => {
-            if (elements.pixelInspector) elements.pixelInspector.classList.add('hidden');
-        });
-
         elements.resultCanvas.addEventListener('wheel', (e) => {
             e.preventDefault();
             const rect = elements.canvasContainer?.getBoundingClientRect();
@@ -265,108 +579,6 @@ export function initializeEventListeners() {
             zoomTo(e.deltaY < 0 ? state.zoom * 1.2 : state.zoom / 1.2, { x: e.clientX - rect.left, y: e.clientY - rect.top });
         });
     }
-
-    window.addEventListener('mouseup', (e) => {
-        if (e.button !== 0) return;
-        const analysis = getActiveAnalysis();
-        if (!analysis) return;
-
-        const wasDrawing = state.isDrawing;
-        state.isDrawing = false;
-        state.lastPaintPos = null;
-
-        const finalizePath = (pathType: 'spheroid' | 'margin') => {
-            const simplified = simplifyPath(state.drawnPath, 1.5);
-            if (simplified.length > 3) {
-                if (pathType === 'spheroid') {
-                    analysis.manualDrawnPath = [...simplified, simplified[0]];
-                    analyzeSpheroid();
-                } else {
-                    analysis.migrationMarginPath = [...simplified, simplified[0]];
-                    updateResultsDisplay();
-                }
-            } else {
-                if (pathType === 'spheroid') analysis.manualDrawnPath = [];
-                else analysis.migrationMarginPath = [];
-            }
-            state.drawnPath = [];
-            setMode(null);
-        };
-
-        if ((state.currentMode === 'drawSpheroid' || state.currentMode === 'drawMargin') && wasDrawing) {
-            finalizePath(state.currentMode === 'drawSpheroid' ? 'spheroid' : 'margin');
-            return;
-        }
-
-        const wasPanning = state.isPanning;
-        if (state.isPanning) {
-            state.isPanning = false;
-            if (!state.currentMode && !state.paintModeContext && elements.resultCanvas) elements.resultCanvas.style.cursor = 'grab';
-        }
-
-        const mouseUpPos = { x: e.clientX, y: e.clientY };
-        const isDrag = !state.mouseDownPos || Math.hypot(mouseUpPos.x - state.mouseDownPos.x, mouseUpPos.y - state.mouseDownPos.y) > 4;
-        state.mouseDownPos = null;
-
-        if (wasPanning || isDrag) return;
-        const pos = getMousePos(e);
-        
-        switch (state.currentMode) {
-            case 'magicPaint': runMagicWand(pos); break;
-            case 'selectBackground': {
-                const originalCtx = elements.originalCanvas.getContext('2d', { willReadFrequently: true });
-                if (!originalCtx) return;
-                const p = originalCtx.getImageData(Math.round(pos.x), Math.round(pos.y), 1, 1).data;
-                state.backgroundColorToSubtract = { r: p[0], g: p[1], b: p[2] };
-                const bgPreview = document.getElementById('backgroundColorPreview') as HTMLElement;
-                if(bgPreview) bgPreview.style.backgroundColor = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
-                applyImageFilters(analysis);
-                setMode(null);
-                break;
-            }
-            case 'removeCell': {
-                 for(let i = analysis.detectedParticles.length - 1; i >= 0; i--) { 
-                    const p = analysis.detectedParticles[i]; 
-                    if (p.ellipse && isPointInEllipse(pos, p.ellipse, 2.0)) {
-                        analysis.detectedParticles.splice(i, 1); 
-                        state.isPaintLayerDirty = true; 
-                        updateCellCounters();
-                        requestRedraw(); 
-                        return; 
-                    } 
-                } 
-                break;
-            }
-            case 'addCell': {
-                const particle = createParticleFromPixels([{x: pos.x, y: pos.y}], true);
-                if (isCellPositionValid(particle.centroid)) {
-                    analysis.detectedParticles.push(particle);
-                    state.isPaintLayerDirty = true;
-                    updateCellCounters();
-                    requestRedraw();
-                }
-                break;
-            }
-            case 'setMigrationPoint': {
-                if (!analysis.lastAnalysisResult.centerX) return;
-                const { centerX, centerY } = analysis.lastAnalysisResult;
-                const maxRadius = Math.hypot(pos.x - centerX, pos.y - centerY);
-                analysis.lastAnalysisResult = { ...analysis.lastAnalysisResult, maxRadius, maxRadiusData: { point: pos, angle: Math.atan2(pos.y - centerY, pos.x - centerX) } };
-                calculateAndStoreMigrationMetrics();
-                setMode(null);
-                if (analysis.currentAnalysisStep === 2) completeStepAndAdvance();
-                break;
-            }
-            case 'setHaloPoint': {
-                if (!analysis.lastAnalysisResult.centerX) return;
-                const { centerX, centerY } = analysis.lastAnalysisResult;
-                analysis.haloRadiusData = { radius: Math.hypot(pos.x - centerX, pos.y - centerY), angle: Math.atan2(pos.y - centerY, pos.x - centerX) };
-                calculateAndStoreMigrationMetrics();
-                setMode(null);
-                break;
-            }
-        }
-    });
 
     window.addEventListener('resize', resetView);
     window.addEventListener('keydown', handleGlobalKeyDown, false);
@@ -390,13 +602,29 @@ export function initializeEventListeners() {
         resetView();
     });
 
+    elements.brushToolPaint?.addEventListener('click', () => { state.isErasing = false; updateBrushToolsUI(); });
+    elements.brushToolErase?.addEventListener('click', () => { state.isErasing = true; updateBrushToolsUI(); });
+
     elements.confirmPaintButton?.addEventListener('click', () => {
-        if (state.paintModeContext === 'spheroid') processPaintedSpheroid();
-        else if (state.paintModeContext === 'margin') processPaintedMargin();
+        if (state.paintModeContext === 'spheroid') {
+            const ctx = elements.paintSpheroidCanvas.getContext('2d');
+            const isCanvasDirty = ctx && ctx.getImageData(0, 0, elements.paintSpheroidCanvas.width, elements.paintSpheroidCanvas.height).data.some(channel => channel !== 0);
+            
+            if (isCanvasDirty) {
+                processPaintedSpheroid();
+            } else {
+                analyzeSpheroid(); // Re-analyze path if only eraser was used on it
+                 pushToHistory();
+            }
+
+        } else if (state.paintModeContext === 'margin') {
+            processPaintedMargin();
+        }
         elements.brushControls?.classList.add('hidden');
         state.paintModeContext = null;
         updateUIMode();
     });
+
     elements.cancelPaintButton?.addEventListener('click', () => {
         if (state.paintModeContext && elements.brushControls) {
             elements.brushControls.classList.add('hidden');
@@ -691,7 +919,15 @@ export function initializeEventListeners() {
         const stepEl = (e.target as HTMLElement).closest<HTMLElement>('.workflow-step');
         if (stepEl) {
             const stepIndex = parseInt(stepEl.dataset.step || '-1');
-            const coreStepComplete = getActiveAnalysis()?.manualDrawnPath.length ?? 0 > 0;
+            const analysis = getActiveAnalysis();
+            if (!analysis) return;
+
+            // If a completed analysis is clicked, un-complete it for editing.
+            if (analysis.isCompleted) {
+                analysis.isCompleted = false;
+            }
+
+            const coreStepComplete = analysis.manualDrawnPath.length > 0;
             const isUnlocked = stepIndex <= 1 || coreStepComplete;
             if (stepIndex !== -1 && isUnlocked) goToWorkflowStep(stepIndex);
         }

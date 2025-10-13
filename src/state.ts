@@ -4,7 +4,6 @@
 
 type Point = { x: number; y: number };
 
-let nextTabId = 0;
 export let nextStickerId = 0;
 
 export class StickerState {
@@ -52,6 +51,11 @@ export class ImageAnalysisState {
 
     // Workflow State for this specific image
     currentAnalysisStep: number = 0;
+    isCompleted: boolean = false;
+
+    // Undo/Redo History State
+    actionHistory: any[] = [];
+    historyIndex: number = -1;
 
     constructor(file: File) {
         this.file = file;
@@ -78,8 +82,8 @@ export class TabState {
 }
 
 export function createNewTab(name?: string): TabState {
-    const newName = name || `Aba ${nextTabId + 1}`;
-    return new TabState(nextTabId++, newName);
+    const newName = name || `Aba ${state.nextTabId + 1}`;
+    return new TabState(state.nextTabId++, newName);
 }
 
 // The main state object
@@ -87,6 +91,7 @@ export const state = {
     tabs: [] as TabState[],
     activeTabIndex: -1,
     minimizedPanels: [] as string[],
+    nextTabId: 0,
     nextStickerId: 0,
     currentMode: null as string | null,
     backgroundColorToSubtract: null as { r: number; g: number; b: number } | null,
@@ -100,6 +105,7 @@ export const state = {
     lastPaintPos: null as Point | null,
     isRedrawing: false,
     paintModeContext: null as string | null,
+    isErasing: false,
     isPaintLayerDirty: true,
     isListeningForShortcut: false,
     tempDroppedFiles: [] as File[],

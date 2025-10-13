@@ -1,5 +1,7 @@
 import { state, getActiveAnalysis } from './state';
 import * as elements from './elements';
+import { undo, redo } from './analysis';
+import { showToast } from './utils';
 
 const SHORTCUT_STORAGE_KEY = 'spheroidAnalyzerShortcuts';
 
@@ -7,6 +9,8 @@ const defaultShortcuts = {
     loadImage: 'o',
     saveAnalysis: 's',
     resetAll: 'r',
+    nextImage: 'ArrowRight',
+    prevImage: 'ArrowLeft',
     toggleFullscreen: 'f',
     zoomIn: '+',
     zoomOut: '-',
@@ -22,17 +26,39 @@ const defaultShortcuts = {
     prevStep: 'Backspace',
     toggleAdjustments: 'a',
     toggleCumulative: 't',
+    goToStep1: '1',
+    goToStep2: '2',
+    goToStep3: '3',
+    goToStep4: '4',
+    goToStep5: '5',
+    undoAction: 'Control+z',
+    redoAction: 'Control+y',
+    confirmOrAdvance: 'Enter',
+};
+
+// Helper function for step navigation shortcuts
+const createStepAction = (stepIndex: number) => () => {
+    const analysis = getActiveAnalysis();
+    if (!analysis) return;
+    // Core step (step 1, index 1) must be complete to unlock subsequent steps
+    const coreStepComplete = analysis.manualDrawnPath.length > 0;
+    const isUnlocked = stepIndex <= 1 || coreStepComplete;
+    if (isUnlocked) {
+        import('./ui').then(m => m.goToWorkflowStep(stepIndex));
+    }
 };
 
 const actions: { [key: string]: { label: string, action: () => void } } = {
     loadImage: { label: "Carregar Imagem", action: () => elements.imageLoader?.click() },
     saveAnalysis: { label: "Salvar Análise", action: () => elements.saveAnalyzedButton?.click() },
     resetAll: { label: "Resetar Tudo", action: () => elements.resetButton?.click() },
+    nextImage: { label: "Próxima Imagem", action: () => elements.mainNextImageButton?.click() },
+    prevImage: { label: "Imagem Anterior", action: () => elements.mainPrevImageButton?.click() },
     toggleFullscreen: { label: "Tela Cheia", action: () => elements.fullscreenButton?.click() },
     zoomIn: { label: "Aumentar Zoom", action: () => elements.zoomInButton?.click() },
     zoomOut: { label: "Reduzir Zoom", action: () => elements.zoomOutButton?.click() },
     zoomReset: { label: "Resetar Zoom", action: () => elements.zoomResetButton?.click() },
-    paintSpheroid: { label: "Pintar Esferoide", action: () => elements.paintSpheroidButton?.click() },
+    paintSpheroid: { label: "Editar Núcleo (Pincel/Borracha)", action: () => elements.paintSpheroidButton?.click() },
     drawSpheroid: { label: "Contornar Esferoide", action: () => elements.drawSpheroidButton?.click() },
     magicPaint: { label: "Mágica no Esferoide", action: () => elements.magicPaintButton?.click() },
     drawMargin: { label: "Desenhar Borda", action: () => elements.drawMarginButton?.click() },
@@ -55,6 +81,47 @@ const actions: { [key: string]: { label: string, action: () => void } } = {
             import('./ui').then(m => m.minimizePanel('cumulative'));
         }
     }},
+    confirmOrAdvance: {
+        label: "Confirmar / Avançar",
+        action: () => {
+            const analysis = getActiveAnalysis();
+            if (state.paintModeContext) {
+                elements.confirmPaintButton?.click();
+            } else if (analysis) {
+                switch (analysis.currentAnalysisStep) {
+                    case 1: // Step 2 (Núcleo)
+                        if (analysis.manualDrawnPath.length > 2) {
+                            if (confirm('Deseja confirmar o núcleo e avançar para a etapa de Raios? O Raio do Halo será definido automaticamente.')) {
+                                const { centerX, centerY, coreRadius } = analysis.lastAnalysisResult;
+                                if (centerX !== undefined && coreRadius > 0) {
+                                    analysis.haloRadiusData = {
+                                        radius: coreRadius,
+                                        angle: -Math.PI / 2 // Straight up
+                                    };
+                                    import('./results').then(m => m.calculateAndStoreMigrationMetrics());
+                                    import('./ui').then(m => m.completeStepAndAdvance());
+                                    showToast("Raio do Halo definido automaticamente.");
+                                }
+                            }
+                        }
+                        break;
+                    case 3: // Células
+                        elements.confirmCellCountButton?.click();
+                        break;
+                    case 4: // Borda
+                        elements.confirmAnalysisButton?.click();
+                        break;
+                }
+            }
+        }
+    },
+    goToStep1: { label: "Ir para Etapa 1 (Preparação)", action: createStepAction(0) },
+    goToStep2: { label: "Ir para Etapa 2 (Núcleo)", action: createStepAction(1) },
+    goToStep3: { label: "Ir para Etapa 3 (Raios)", action: createStepAction(2) },
+    goToStep4: { label: "Ir para Etapa 4 (Células)", action: createStepAction(3) },
+    goToStep5: { label: "Ir para Etapa 5 (Borda)", action: createStepAction(4) },
+    undoAction: { label: "Desfazer Ação", action: undo },
+    redoAction: { label: "Refazer Ação", action: redo },
 };
 
 let shortcutMap: { [key: string]: string } = { ...defaultShortcuts };
@@ -108,9 +175,12 @@ export function populateShortcutsPanel() {
     });
 
     document.getElementById('resetShortcutsButton')?.addEventListener('click', () => {
-        shortcutMap = { ...defaultShortcuts };
-        saveShortcuts();
-        populateShortcutsPanel();
+        if (confirm('Tem certeza que deseja resetar todos os atalhos para o padrão?')) {
+            shortcutMap = { ...defaultShortcuts };
+            saveShortcuts();
+            populateShortcutsPanel();
+            showToast('Atalhos restaurados para o padrão.');
+        }
     });
 }
 
@@ -122,11 +192,11 @@ function listenForNewShortcut(actionId: string, displayElement: HTMLElement) {
     const keydownHandler = (e: KeyboardEvent) => {
         e.preventDefault(); e.stopPropagation();
         const parts = [];
-        if (e.ctrlKey) parts.push('Ctrl');
+        if (e.ctrlKey) parts.push('Control');
         if (e.altKey) parts.push('Alt');
         if (e.shiftKey) parts.push('Shift');
         const keyName = (e.key === ' ' || e.key.length > 1) ? e.key : e.key.toLowerCase();
-        if (!['Control', 'Alt', 'Shift'].includes(keyName)) parts.push(keyName);
+        if (!['Control', 'Alt', 'Shift', 'Meta'].includes(keyName)) parts.push(keyName);
         const newShortcut = parts.join('+');
         if (newShortcut) {
             shortcutMap[actionId as keyof typeof shortcutMap] = newShortcut;
@@ -164,8 +234,14 @@ export function handleGlobalKeyDown(e: KeyboardEvent) {
         if (!shortcut) return false;
         const shortcutParts = shortcut.toLowerCase().split('+');
         const mainKey = shortcutParts.pop();
+        
+        // Handle Ctrl+y for redo, which also triggers history.forward() in some browsers
+        if ((e.ctrlKey || e.metaKey) && key === 'y') {
+            e.preventDefault();
+        }
+
         return key === mainKey &&
-               e.ctrlKey === shortcutParts.includes('ctrl') &&
+               (e.ctrlKey || e.metaKey) === shortcutParts.includes('control') &&
                e.shiftKey === shortcutParts.includes('shift') &&
                e.altKey === shortcutParts.includes('alt');
     });
@@ -174,7 +250,6 @@ export function handleGlobalKeyDown(e: KeyboardEvent) {
         e.preventDefault();
         actions[actionId].action();
     } else if (state.paintModeContext) {
-        if (key === 'enter') { e.preventDefault(); elements.confirmPaintButton?.click(); }
         if (key === 'escape') elements.cancelPaintButton?.click();
     } else if (key === 'escape' && state.currentMode) {
         import('./ui').then(m => m.setMode(null));

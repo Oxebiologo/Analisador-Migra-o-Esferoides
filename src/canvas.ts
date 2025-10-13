@@ -1,3 +1,8 @@
+/**
+ * This file contains the core logic for the application's canvas rendering,
+ * including drawing analysis results, handling zoom/pan, and painting operations.
+ */
+
 import { state, getActiveAnalysis } from './state';
 import * as elements from './elements';
 import { findContourPointAtAngle } from './utils';
@@ -57,8 +62,20 @@ export function drawForSaving(ctx: CanvasRenderingContext2D) {
 
     // Draw base layers
     ctx.drawImage(elements.processedImageCanvas, 0, 0);
+
+    // Apply real-time opacity to the temporary paint canvas during editing
+    const isEditing = state.paintModeContext !== null;
+    if (isEditing) {
+        ctx.globalAlpha = parseInt(elements.brushOpacityInput.value, 10) / 100;
+    }
+    
     ctx.drawImage(elements.paintSpheroidCanvas, 0, 0);
     ctx.drawImage(elements.manualPaintCanvas, 0, 0);
+    
+    // Reset globalAlpha after drawing the potentially transparent layer
+    if (isEditing) {
+        ctx.globalAlpha = 1.0;
+    }
     
     if (elements.paintCellsCheckbox.checked) {
         ctx.globalAlpha = 1.0;
@@ -272,21 +289,34 @@ export function getMousePos(evt: MouseEvent): { x: number; y: number } {
 }
 
 /**
- * Paints a line on a target canvas.
+ * Paints a line on a target canvas, with an option for erasing.
  * @param startPos Starting position {x, y}.
  * @param endPos Ending position {x, y}.
  * @param targetCanvas The canvas element to paint on.
+ * @param isErasing If true, removes content instead of adding it.
  */
-export function paintOnCanvas(startPos: { x: number; y: number }, endPos: { x: number; y: number }, targetCanvas: HTMLCanvasElement) {
+export function paintOnCanvas(startPos: { x: number; y: number }, endPos: { x: number; y: number }, targetCanvas: HTMLCanvasElement, isErasing = false) {
     const ctx = targetCanvas.getContext('2d');
     if (!ctx) return;
+
+    ctx.save();
+
+    if (isErasing) {
+        ctx.globalCompositeOperation = 'destination-out';
+    } else {
+        // Brush strokes are always solid; the layer's opacity is handled during rendering.
+        ctx.strokeStyle = `rgba(45, 212, 191, 1)`;
+    }
+
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(45, 212, 191, 0.5)';
     ctx.lineWidth = Number(elements.brushSizeInput.value);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.moveTo(startPos.x, startPos.y);
     ctx.lineTo(endPos.x, endPos.y);
     ctx.stroke();
+
+    ctx.restore();
+
     requestRedraw();
 }

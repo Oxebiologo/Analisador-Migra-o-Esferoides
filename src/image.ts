@@ -1,9 +1,10 @@
 import { state, getActiveTab, getActiveAnalysis, ImageAnalysisState } from './state';
 import * as elements from './elements';
 import { requestRedraw, resetView } from './canvas';
-import { convolve } from './utils';
+import { convolve, isImageGrayscale } from './utils';
 import { updateUIMode, activateStepWorkflow, updateFullscreenButton, goToWorkflowStep, updateCellCounters, setSaveButtonState, updateCumulativeResultsDisplay } from './ui';
 import { addToCumulativeResults, updateResultsDisplay } from './results';
+import { initializeHistoryForAnalysis } from './analysis';
 
 /**
  * Resets the UI for a tab that has no more images.
@@ -73,6 +74,23 @@ function processAnalysis(analysis: ImageAnalysisState) {
     if (originalCtx) {
         originalCtx.drawImage(analysis.originalImage, 0, 0);
     }
+
+    // Check if the image is grayscale and auto-advance if it is.
+    if (isImageGrayscale(elements.originalCanvas)) {
+        analysis.is8Bit = true;
+    }
+    
+    if (elements.bitStatus) {
+        if (analysis.is8Bit) {
+            elements.bitStatus.textContent = '8-bit';
+            elements.bitStatus.className = 'text-xs font-bold ml-auto px-2 py-0.5 rounded-full bg-teal-500/80 text-white';
+            if (elements.convertTo8BitButton) (elements.convertTo8BitButton as HTMLButtonElement).disabled = true;
+        } else {
+            elements.bitStatus.textContent = 'Cor';
+            elements.bitStatus.className = 'text-xs font-bold ml-auto px-2 py-0.5 rounded-full bg-amber-500/80 text-white';
+            if (elements.convertTo8BitButton) (elements.convertTo8BitButton as HTMLButtonElement).disabled = false;
+        }
+    }
     
     // Reset view state and apply filters for the loaded image
     if (elements.resetButton) elements.resetButton.disabled = false;
@@ -82,7 +100,20 @@ function processAnalysis(analysis: ImageAnalysisState) {
     resetView();
     updateUIMode();
     updateFullscreenButton(!!document.fullscreenElement);
-    goToWorkflowStep(analysis.currentAnalysisStep); // Restore workflow step
+    
+    // Robustly handle workflow state
+    if (analysis.isCompleted) {
+        // If the analysis is marked as completed, go to the final step's view
+        // The goToWorkflowStep function will handle showing the "completed" state.
+        goToWorkflowStep(4);
+    } else {
+        // If it's a "fresh" analysis at step 0 and the image is already 8-bit, skip to step 1.
+        if (analysis.currentAnalysisStep === 0 && analysis.is8Bit) {
+            analysis.currentAnalysisStep = 1; 
+        }
+        // Restore workflow to its last known step for incomplete analyses.
+        goToWorkflowStep(analysis.currentAnalysisStep);
+    }
 
     const initialMessage = document.getElementById('initial-message');
     if (initialMessage) initialMessage.style.display = 'none';
@@ -103,9 +134,10 @@ export function loadImageByIndex(index: number) {
     addToCumulativeResults(); // Save previous analysis before switching
     activeTab.currentAnalysisIndex = index;
     const analysis = activeTab.analyses[index];
+    initializeHistoryForAnalysis();
 
-    // If switching to an unedited image, automatically open the analysis workflow
-    if (analysis.manualDrawnPath.length === 0) {
+    // If switching to an unedited image that is not completed, automatically open the analysis workflow
+    if (analysis.manualDrawnPath.length === 0 && !analysis.isCompleted) {
         activateStepWorkflow();
     }
 
