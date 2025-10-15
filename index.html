@@ -206,8 +206,12 @@
             <div id="options-panel" class="resizable-panel hidden absolute top-44 left-28 w-[380px] bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40"></div>
             <div id="shortcuts-panel" class="resizable-panel hidden absolute top-48 left-32 w-[420px] bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40"></div>
             <div id="view-controls-panel" class="resizable-panel hidden absolute bottom-4 right-4 w-[280px] bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40"></div>
-            <div id="speed-analysis-panel" class="resizable-panel hidden absolute top-52 left-36 w-[800px] bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40"></div>
+            <div id="speed-analysis-panel" class="resizable-panel hidden absolute top-20 left-4 w-[420px] bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40"></div>
+            <div id="speed-analysis-results-display" class="resizable-panel hidden absolute top-20 right-4 w-[400px] bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40"></div>
             <div id="help-panel" class="resizable-panel hidden absolute top-56 left-40 w-[500px] bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-lg shadow-2xl z-40"></div>
+            
+            <!-- Mobile Panel Overlay -->
+            <div id="mobile-panel-overlay" class="hidden fixed inset-0 bg-black/60 z-40 md:hidden"></div>
 
             <!-- Modal for Tab Selection / Project Load -->
             <div id="tab-selection-modal" class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -559,11 +563,13 @@
                         <p class="text-center text-xs font-semibold text-gray-400 mb-1">Raios de Medição</p>
                         <div class="flex items-center gap-2">
                             <button id="setHaloPointButton" data-mode="setHaloPoint" class="manual-button bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white font-bold py-2 px-4 rounded-lg w-full transition-colors text-sm">Raio do Halo<kbd class="shortcut-key">H</kbd></button>
-                            <input id="haloLineColorInput" type="color" value="#fb923c" title="Cor do Raio Halo" class="bg-transparent border-none rounded cursor-pointer h-10 w-12">
+                            <button id="deleteHaloPointButton" title="Deletar Raio do Halo" class="p-2.5 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
+                            <input id="haloLineColorInput" type="color" value="#fb923c" title="Cor do Raio Halo" class="bg-transparent border-none rounded cursor-pointer h-10 w-12 flex-shrink-0">
                         </div>
-                        <div class="flex items-center gap-2 mt-2">
+                        <div class="flex items-center gap-2">
                             <button id="setMigrationPointButton" data-mode="setMigrationPoint" class="manual-button bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white font-bold py-2 px-4 rounded-lg w-full transition-colors text-sm">Ponto Máximo<kbd class="shortcut-key">M</kbd></button>
-                            <input id="maxLineColorInput" type="color" value="#c026d3" title="Cor do Raio Máximo" class="bg-transparent border-none rounded cursor-pointer h-10 w-12">
+                            <button id="deleteMigrationPointButton" title="Deletar Ponto Máximo" class="p-2.5 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
+                            <input id="maxLineColorInput" type="color" value="#c026d3" title="Cor do Raio Máximo" class="bg-transparent border-none rounded cursor-pointer h-10 w-12 flex-shrink-0">
                         </div>
                     </div>
                 </div>
@@ -734,50 +740,35 @@
             </details>
         </div>
         <div id="speed-analysis-section" class="p-3 flex flex-col h-full overflow-hidden">
-             <!-- Top Configuration Section -->
-            <div class="flex-shrink-0 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="text-xs text-gray-400 font-semibold block mb-1">1. Selecionar Abas para Análise</label>
-                    <div id="speed-analysis-tab-selection" class="space-y-1 p-2 border border-gray-700 rounded-lg max-h-32 overflow-y-auto bg-gray-900/50">
+            <!-- Section 1: Tab Selection -->
+            <details class="subsection-details flex-shrink-0" open>
+                <summary><h4 class="font-semibold text-gray-400 text-sm">1. Selecionar Abas para Análise</h4></summary>
+                <div class="subsection-content px-3 pt-2 pb-3">
+                    <label class="flex items-center space-x-2 p-1.5 rounded-md hover:bg-gray-700/50 cursor-pointer border-b border-gray-600 mb-2">
+                        <input type="checkbox" id="speed-analysis-select-all" class="w-4 h-4 text-teal-500 bg-gray-700 border-gray-600 rounded focus:ring-teal-500">
+                        <span class="text-sm font-semibold">Selecionar Todas</span>
+                    </label>
+                    <div id="speed-analysis-tab-selection" class="space-y-1 max-h-48 overflow-y-auto">
                         <!-- Checkboxes populated by script -->
                     </div>
                 </div>
-                <div>
-                    <label class="text-xs text-gray-400 font-semibold">2. Colar Dados (Opcional)</label>
-                    <textarea id="paste-data-area" rows="3" class="w-full bg-gray-800/50 border border-gray-600 rounded-md mt-1 p-2 text-xs font-mono focus:ring-teal-500 focus:border-teal-500" placeholder="Copie de uma planilha e cole aqui..."></textarea>
-                    <button id="load-pasted-data-btn" class="w-full mt-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-3 rounded-lg transition-colors text-xs">Carregar Dados Colados</button>
+            </details>
+        
+            <!-- Section 2: Time Mapping (per tab) -->
+            <details class="subsection-details mt-2 flex-grow flex flex-col overflow-hidden" open>
+                <summary><h4 class="font-semibold text-gray-400 text-sm">2. Definir Tempo (por Aba)</h4></summary>
+                <div class="subsection-content px-3 pt-2 pb-3 flex-grow flex flex-col overflow-hidden">
+                    <p class="text-xs text-gray-500 mb-1">Defina o ponto de tempo em dias para cada aba selecionada.</p>
+                    <div id="speed-analysis-time-mapping" class="overflow-auto border border-gray-700 rounded-lg flex-grow">
+                        <!-- Time mapping table will be injected here -->
+                    </div>
                 </div>
-            </div>
-
-            <!-- Analysis Mode -->
-            <div class="mt-3 flex-shrink-0">
-                <label class="text-xs text-gray-400 font-semibold block mb-1">Modo de Análise</label>
-                <div class="grid grid-cols-2 text-center gap-1 p-1 bg-gray-800/50 rounded-lg speed-analysis-mode-toggle">
-                    <input type="radio" name="speed-analysis-mode" id="mode-within-tabs" value="within-tabs" class="hidden" checked>
-                    <label for="mode-within-tabs" class="block w-full text-xs font-semibold py-1.5 px-2 rounded-md cursor-pointer transition-colors">Dentro de cada Aba</label>
-                    
-                    <input type="radio" name="speed-analysis-mode" id="mode-all-together" value="all-together" class="hidden">
-                    <label for="mode-all-together" class="block w-full text-xs font-semibold py-1.5 px-2 rounded-md cursor-pointer transition-colors">Todos Juntos</label>
-                </div>
-            </div>
-
-            <!-- Main Data Table -->
-            <div class="mt-3 flex-grow flex flex-col overflow-hidden">
-                <label class="text-xs text-gray-400 font-semibold flex-shrink-0">3. Inserir Tempos (dias)</label>
-                <div id="speed-analysis-source-data" class="overflow-auto border border-gray-700 rounded-lg mt-1 flex-grow">
-                    <!-- Data table will be injected here -->
-                </div>
-            </div>
-
-            <!-- Bottom Action & Results -->
-            <div class="mt-auto pt-3 flex-shrink-0 grid grid-cols-2 gap-4 items-start">
-                <div class="flex flex-col gap-2">
-                    <p class="text-xs text-gray-400 font-semibold">Fórmula: <span class="font-mono text-gray-300">(V₂ - V₁) / (T₂ - T₁)</span></p>
-                    <button id="calculate-speeds-btn" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">Calcular Velocidades</button>
-                </div>
-                <div id="speed-analysis-results" class="hidden space-y-2 overflow-y-auto max-h-48">
-                    <!-- Results will be injected here -->
-                </div>
+            </details>
+        
+            <!-- Bottom Action Area -->
+            <div class="mt-auto pt-3 flex-shrink-0 flex flex-col gap-3">
+                <p class="text-xs text-gray-400 font-semibold">Fórmula: <span class="font-mono text-gray-300">(Média₂ - Média₁) / (T₂ - T₁)</span></p>
+                <button id="calculate-speeds-btn" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">Calcular Velocidades</button>
             </div>
         </div>
     </div>

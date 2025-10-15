@@ -1,15 +1,10 @@
-
-
-
-
-
 import * as elements from './elements';
 import { state, getActiveTab, getActiveAnalysis, StickerState } from './state';
 import { requestRedraw, resetView, zoomTo, getMousePos, paintOnCanvas } from './canvas';
 import { applyImageFilters, handleFiles, loadImageByIndex, resetImageAdjustments, deleteCurrentImage } from './image';
 import { setMode, updateUIMode, initializePanels, syncCheckboxes, completeStepAndAdvance, switchTab, addNewTab, deleteTab, renderTabs, updateFullscreenButton, renameTab, renderStickers, updateCellCounters, goToWorkflowStep, minimizePanel, restorePanel, makeDraggable, renderMinimizedPanels } from './ui';
 import { analyzeSpheroid, refineContour, runMagicWand, processPaintedSpheroid, processPaintedMargin, pushToHistory, handleSpheroidEdit } from './analysis';
-import { addToCumulativeResults, clearCumulativeResults, copyCumulativeCsv, saveCumulativeCsv, openInSheets, deleteCumulativeResult, saveProject, loadProject, updateResultsDisplay, calculateAndStoreMigrationMetrics, populateSpeedAnalysisPanel } from './results';
+import { addToCumulativeResults, clearCumulativeResults, copyCumulativeCsv, saveCumulativeCsv, openInSheets, deleteCumulativeResult, saveProject, loadProject, updateResultsDisplay, calculateAndStoreMigrationMetrics } from './results';
 import { handleGlobalKeyDown } from './shortcuts';
 import { isPointInEllipse, simplifyPath, debounce, createParticleFromPixels, isCellPositionValid, showToast } from './utils';
 
@@ -104,16 +99,70 @@ export function initializeEventListeners() {
         const file = (e.target as HTMLInputElement).files?.[0];
         if (!file) return;
     
-        try {
-            const content = await file.text();
-            const projectData = JSON.parse(content);
-            if (!projectData.tabs) throw new Error("Formato de projeto inválido.");
-            showTabSelectionForLoad(file, projectData);
-        } catch (err) {
-            console.error("Falha ao ler o arquivo de projeto:", err);
-            showToast("Arquivo de projeto inválido ou corrompido.", 5000);
+        const recalculatingOverlay = document.getElementById('recalculating-overlay');
+        const overlayText = recalculatingOverlay?.querySelector('h2');
+        if (recalculatingOverlay && overlayText) {
+            overlayText.textContent = 'Lendo arquivo do projeto...';
+            recalculatingOverlay.classList.remove('hidden');
         }
-        (e.target as HTMLInputElement).value = '';
+    
+        // Use a worker to read and parse the large file off the main thread
+        const workerCode = `
+            self.onmessage = async (event) => {
+                const { file } = event.data;
+                try {
+                    const content = await file.text();
+                    const projectData = JSON.parse(content);
+                    if (!projectData.tabs) {
+                        throw new Error("Formato de projeto inválido.");
+                    }
+                    // Post the parsed data back. JSON is structured-cloneable.
+                    self.postMessage({ status: 'done', projectData: projectData });
+                } catch (error) {
+                    // Post error message back if something fails
+                    self.postMessage({ status: 'error', error: error.message });
+                }
+            };
+        `;
+    
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const workerUrl = URL.createObjectURL(blob);
+        const worker = new Worker(workerUrl);
+    
+        worker.onmessage = (event) => {
+            const { status, projectData, error } = event.data;
+    
+            if (recalculatingOverlay && overlayText) {
+                recalculatingOverlay.classList.add('hidden');
+                overlayText.textContent = 'Recalculando Projeto...'; // Reset for later use
+            }
+    
+            if (status === 'done') {
+                showTabSelectionForLoad(file, projectData);
+            } else {
+                console.error("Falha ao ler o arquivo de projeto via worker:", error);
+                showToast("Arquivo de projeto inválido ou corrompido.", 5000);
+            }
+    
+            worker.terminate();
+            URL.revokeObjectURL(workerUrl);
+        };
+    
+        worker.onerror = (err) => {
+            if (recalculatingOverlay && overlayText) {
+                recalculatingOverlay.classList.add('hidden');
+                overlayText.textContent = 'Recalculando Projeto...';
+            }
+            console.error("Worker error during project load:", err);
+            showToast("Ocorreu um erro ao carregar o projeto.", 5000);
+            worker.terminate();
+            URL.revokeObjectURL(workerUrl);
+        };
+    
+        // Start the worker
+        worker.postMessage({ file: file });
+    
+        (e.target as HTMLInputElement).value = ''; // Reset input to allow loading the same file again
     });
 
     const closeTabSelectionModal = () => {
@@ -649,7 +698,14 @@ export function initializeEventListeners() {
     elements.deleteImageButton?.addEventListener('click', deleteCurrentImage);
     elements.mainDeleteImageButton?.addEventListener('click', deleteCurrentImage);
 
-    elements.addCumulativeButton?.addEventListener('click', addToCumulativeResults);
+    elements.addCumulativeButton?.addEventListener('click', () => {
+        const analysis = getActiveAnalysis();
+        if (analysis) {
+            analysis.isCurrentAnalysisSaved = false; // Force it to be "unsaved" to allow updating
+            addToCumulativeResults();
+            showToast('Resultado adicionado/atualizado na tabela!');
+        }
+    });
     elements.showCumulativeButton?.addEventListener('click', () => {
         restorePanel('cumulative');
     });
@@ -925,6 +981,7 @@ export function initializeEventListeners() {
             // If a completed analysis is clicked, un-complete it for editing.
             if (analysis.isCompleted) {
                 analysis.isCompleted = false;
+                analysis.isCurrentAnalysisSaved = false; // Mark for re-saving upon completion
             }
 
             const coreStepComplete = analysis.manualDrawnPath.length > 0;
@@ -933,10 +990,27 @@ export function initializeEventListeners() {
         }
     });
     
-    // No-op sync checkboxes since fullscreen duplicates were removed.
-    // This could be revived if a separate fullscreen UI is added back.
-    // syncCheckboxes(elements.showHaloRadiusCircleCheckbox, elements.fsShowHaloRadiusCircleCheckbox);
+    // Speed Analysis Panel Listener
+    elements.calculateSpeedsBtn?.addEventListener('click', () => {
+        import('./results').then(m => m.calculateAndDisplaySpeeds());
+    });
 
+    const mobileOverlay = document.getElementById('mobile-panel-overlay');
+    if (mobileOverlay) {
+        mobileOverlay.addEventListener('click', () => {
+            // Deactivate all header buttons that toggle panels
+            document.querySelectorAll('#header-project-btn, #header-analysis-btn, #header-adjustments-btn, #header-options-btn, #header-shortcuts-btn, #header-help-btn, #header-speed-btn, #view-controls-icon-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+    
+            // Hide all floating panels/drawers
+            elements.allPopupPanels.forEach(panel => {
+                if (panel) {
+                    panel.classList.add('hidden');
+                }
+            });
+        });
+    }
 
     addNewTab();
     updateFullscreenButton(!!document.fullscreenElement);

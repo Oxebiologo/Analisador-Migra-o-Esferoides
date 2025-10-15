@@ -420,3 +420,98 @@ main.dragging {
     margin-left: 0.5rem;
     border-left: 2px solid #374151; /* gray-700 */
 }
+
+/* Responsive Styles for Mobile */
+@media (max-width: 768px) {
+    /* Make header toolbar scrollable instead of wrapping */
+    header > .flex.items-center.gap-2:nth-child(2) {
+        overflow-x: auto;
+        flex-grow: 1;
+        flex-shrink: 1;
+        min-width: 0; /* Prevents flexbox from breaking with long content */
+        scrollbar-width: none; /* For Firefox */
+    }
+    header > .flex.items-center.gap-2:nth-child(2)::-webkit-scrollbar {
+        display: none; /* For Chrome, Safari, and Opera */
+    }
+
+    /* Convert floating panels into drawers */
+    .resizable-panel {
+        position: fixed !important; /* Override inline styles from JS dragging logic */
+        z-index: 50;
+        transition: transform 0.3s ease-in-out;
+        box-shadow: 0 0 2rem rgba(0,0,0,0.5);
+        max-width: 100%;
+        max-height: 100%;
+        left: auto; top: auto; right: auto; bottom: auto; /* Reset positioning */
+    }
+
+    /* Side-sliding drawers */
+    #project-panel, #analysis-workflow-panel, #adjustments-panel,
+    #options-panel, #shortcuts-panel, #view-controls-panel,
+    #speed-analysis-panel, #speed-analysis-results-display, #help-panel,
+    #brushControls {
+        top: 0;
+        right: 0;
+        width: 90vw;
+        max-width: 380px;
+        height: 100% !important;
+        transform: translateX(100%);
+        border-radius: 0;
+        border-top: none;
+        border-bottom: none;
+        border-right: none;
+    }
+
+    /* Bottom-sliding drawers */
+    #results-container, #cumulative-results-container {
+        bottom: 0;
+        left: 0;
+        width: 100% !important;
+        height: 70vh !important;
+        transform: translateY(100%);
+        border-radius: 0.75rem 0.75rem 0 0;
+    }
+
+    /* Animate drawers into view when they are not hidden */
+    .resizable-panel:not(.hidden) {
+        transform: translate(0, 0) !important;
+    }
+
+    /* Hide resize handles on mobile as they are not used */
+    .resize-handle {
+        display: none;
+    }
+
+    /* Show overlay when any panel is open */
+    #project-panel:not(.hidden) ~ #mobile-panel-overlay,
+    #analysis-workflow-panel:not(.hidden) ~ #mobile-panel-overlay,
+    #adjustments-panel:not(.hidden) ~ #mobile-panel-overlay,
+    #options-panel:not(.hidden) ~ #mobile-panel-overlay,
+    #shortcuts-panel:not(.hidden) ~ #mobile-panel-overlay,
+    #view-controls-panel:not(.hidden) ~ #mobile-panel-overlay,
+    #speed-analysis-panel:not(.hidden) ~ #mobile-panel-overlay,
+    #speed-analysis-results-display:not(.hidden) ~ #mobile-panel-overlay,
+    #help-panel:not(.hidden) ~ #mobile-panel-overlay,
+    #results-container:not(.hidden) ~ #mobile-panel-overlay,
+    #cumulative-results-container:not(.hidden) ~ #mobile-panel-overlay,
+    #brushControls:not(.hidden) ~ #mobile-panel-overlay {
+        display: block;
+    }
+    
+    /* Adjustments for other floating/absolute elements */
+    #main-image-nav {
+        bottom: 0.5rem;
+    }
+
+    #creator-footer {
+        display: none; /* Hide footer to save vertical space */
+    }
+
+    #minimized-panels-bar {
+        bottom: 4rem; /* Position above main nav */
+        right: 0.5rem;
+        flex-direction: column;
+        align-items: flex-end;
+    }
+}

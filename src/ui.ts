@@ -136,22 +136,67 @@ export function setSaveButtonState(disabled: boolean) {
 export function makeDraggable(popup: HTMLElement, handleSelector?: string) {
     const handle = handleSelector ? popup.querySelector(handleSelector) as HTMLElement : popup;
     if (!handle) return;
-    handle.onmousedown = (e: MouseEvent) => {
-        const target = e.target as HTMLElement;
-        if (target.closest('button, input, select, textarea, a')) {
+
+    let lastX: number, lastY: number;
+
+    const onDragStart = (clientX: number, clientY: number) => {
+        // Prevent dragging on mobile where panels are drawers
+        if (window.innerWidth <= 768) {
             return;
         }
-        e.preventDefault();
-        let p3 = e.clientX, p4 = e.clientY;
-        document.onmousemove = (ev: MouseEvent) => {
-            ev.preventDefault();
-            const p1 = p3 - ev.clientX, p2 = p4 - ev.clientY;
-            p3 = ev.clientX; p4 = ev.clientY;
-            popup.style.top = (popup.offsetTop - p2) + "px";
-            popup.style.left = (popup.offsetLeft - p1) + "px";
-        };
-        document.onmouseup = () => { document.onmouseup = null; document.onmousemove = null; };
+        lastX = clientX;
+        lastY = clientY;
+        document.addEventListener('mousemove', onMouseDragMove);
+        document.addEventListener('mouseup', onDragEnd);
+        document.addEventListener('touchmove', onTouchDragMove, { passive: false });
+        document.addEventListener('touchend', onDragEnd);
     };
+
+    const onDragMove = (clientX: number, clientY: number) => {
+        const dx = clientX - lastX;
+        const dy = clientY - lastY;
+        lastX = clientX;
+        lastY = clientY;
+        popup.style.top = (popup.offsetTop + dy) + "px";
+        popup.style.left = (popup.offsetLeft + dx) + "px";
+    };
+    
+    const onMouseDragMove = (e: MouseEvent) => {
+        onDragMove(e.clientX, e.clientY);
+    };
+    
+    const onTouchDragMove = (e: TouchEvent) => {
+        e.preventDefault();
+        if (e.touches.length > 0) {
+            onDragMove(e.touches[0].clientX, e.touches[0].clientY);
+        }
+    };
+
+    const onDragEnd = () => {
+        document.removeEventListener('mousemove', onMouseDragMove);
+        document.removeEventListener('mouseup', onDragEnd);
+        document.removeEventListener('touchmove', onTouchDragMove);
+        document.removeEventListener('touchend', onDragEnd);
+    };
+
+    const onMouseDown = (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('button, input, select, textarea, a')) return;
+        e.preventDefault();
+        onDragStart(e.clientX, e.clientY);
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('button, input, select, textarea, a')) return;
+        if (e.touches.length === 1) {
+            e.preventDefault();
+            onDragStart(e.touches[0].clientX, e.touches[0].clientY);
+        }
+    };
+
+    handle.addEventListener('mousedown', onMouseDown);
+    handle.addEventListener('touchstart', onTouchStart, { passive: false });
 }
 
 function makeResizable(popup: HTMLElement) {

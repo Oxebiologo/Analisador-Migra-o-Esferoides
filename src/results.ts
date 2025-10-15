@@ -1,39 +1,33 @@
-// Fix: Import 'ImageAnalysisState' to resolve reference error.
 import { state, getActiveTab, getActiveAnalysis, TabState, createNewTab, StickerState, ImageAnalysisState } from './state';
 import * as elements from './elements';
-import { calculatePolygonArea, findContourPointAtAngle, showToast, copyToClipboard } from './utils';
+import { calculatePolygonArea, findContourPointAtAngle, showToast, copyToClipboard, calculateMorphologicalMetrics } from './utils';
 import { renderTabs, switchTab, updateCumulativeResultsDisplay } from './ui';
 import { requestRedraw } from './canvas';
 import { loadImagePromise, applyImageFilters } from './image';
-import { analyzeSpheroid } from './analysis';
 
 /**
- * Automatically saves the current analysis to cumulative results if it hasn't been saved yet.
+ * Creates a complete data object for a single analysis, ready for the cumulative results table.
+ * @param analysis The analysis state to generate a result from.
+ * @returns A result object or null if the analysis is incomplete.
  */
-export function addToCumulativeResults() {
-    const analysis = getActiveAnalysis();
-    const activeTab = getActiveTab();
-    if (!analysis || !activeTab || !analysis.originalFilename || !analysis.lastAnalysisResult.centerX) return;
-    
-    // Prevent adding if it's already considered saved
-    if(analysis.isCurrentAnalysisSaved) return;
+function createResultObject(analysis: ImageAnalysisState): any | null {
+    if (!analysis.originalFilename || !analysis.lastAnalysisResult.centerX) {
+        return null;
+    }
 
     const scalePixels = parseFloat(elements.scaleBarPixelsInput.value) || 1;
     const scaleMicrometers = parseFloat(elements.scaleBarMicrometersInput.value) || 1;
     const toUm = (px: number) => (px / (scalePixels / scaleMicrometers));
     const toUm2 = (px2: number) => (px2 * Math.pow(scaleMicrometers / scalePixels, 2));
-    
+
     const { coreRadius, maxMigration_px, haloMigration_px, cellCount, morphology } = analysis.lastAnalysisResult;
-    
+
     let migrationArea = 0;
     if (morphology && analysis.migrationMarginPath.length > 2) {
-         migrationArea = calculatePolygonArea(analysis.migrationMarginPath) - morphology.area;
+        migrationArea = calculatePolygonArea(analysis.migrationMarginPath) - morphology.area;
     }
 
-    // Check if an entry for this filename already exists and update it, otherwise push a new one.
-    const existingResultIndex = activeTab.cumulativeResults.findIndex(r => r.filename === analysis.originalFilename);
-
-    const newResult = {
+    return {
         filename: analysis.originalFilename,
         coreRadius_um: toUm(coreRadius).toFixed(1),
         haloMigration_um: toUm(haloMigration_px || 0).toFixed(1),
@@ -54,13 +48,28 @@ export function addToCumulativeResults() {
         meanGradient: morphology ? morphology.meanGradient.toFixed(3) : '0.000',
         varianceGradient: morphology ? morphology.varianceGradient.toFixed(3) : '0.000',
     };
+}
+
+
+/**
+ * Automatically saves the current analysis to cumulative results if it hasn't been saved yet.
+ */
+export function addToCumulativeResults() {
+    const analysis = getActiveAnalysis();
+    const activeTab = getActiveTab();
+    if (!analysis || !activeTab || analysis.isCurrentAnalysisSaved) return;
+
+    const newResult = createResultObject(analysis);
+    if (!newResult) return;
+
+    // Check if an entry for this filename already exists and update it, otherwise push a new one.
+    const existingResultIndex = activeTab.cumulativeResults.findIndex(r => r.filename === analysis.originalFilename);
 
     if (existingResultIndex > -1) {
         activeTab.cumulativeResults[existingResultIndex] = newResult;
     } else {
         activeTab.cumulativeResults.push(newResult);
     }
-
 
     analysis.isCurrentAnalysisSaved = true;
     updateCumulativeResultsDisplay();
@@ -129,11 +138,12 @@ export function updateResultsDisplay() {
 }
 
 /**
- * Calculates migration metrics and stores them in the active analysis state.
+ * Core logic to calculate migration metrics for a given analysis state.
+ * This function modifies the analysis object directly.
+ * @param analysis The analysis state to calculate metrics for.
  */
-export function calculateAndStoreMigrationMetrics() {
-    const analysis = getActiveAnalysis();
-    if (!analysis || !analysis.lastAnalysisResult || !analysis.lastAnalysisResult.centerX) return;
+function calculateAndStoreMigrationMetricsForAnalysis(analysis: ImageAnalysisState) {
+    if (!analysis.lastAnalysisResult || !analysis.lastAnalysisResult.centerX) return;
 
     const { centerX, centerY, maxRadius, maxRadiusData } = analysis.lastAnalysisResult;
     const center = { x: centerX, y: centerY };
@@ -158,6 +168,27 @@ export function calculateAndStoreMigrationMetrics() {
         delete analysis.lastAnalysisResult.haloMigration_px;
         delete analysis.lastAnalysisResult.haloRadiusText;
     }
+}
+
+
+/**
+ * Calculates migration metrics for the currently active analysis and updates the UI.
+ * This is a wrapper for the core logic function.
+ */
+export function calculateAndStoreMigrationMetrics() {
+    const analysis = getActiveAnalysis();
+    if (!analysis) return;
+    
+    calculateAndStoreMigrationMetricsForAnalysis(analysis);
+    
+    // Enable/disable delete buttons
+    if (elements.deleteHaloPointButton) {
+        elements.deleteHaloPointButton.disabled = !analysis.haloRadiusData;
+    }
+    if (elements.deleteMigrationPointButton) {
+        elements.deleteMigrationPointButton.disabled = !analysis.lastAnalysisResult.maxRadiusData;
+    }
+
     updateResultsDisplay();
     requestRedraw();
 }
@@ -308,61 +339,20 @@ export async function saveProject() {
     worker.postMessage(dataToSend);
 }
 
-async function executeLoadProject(projectData: any, file: File) {
-    const recalculatingOverlay = document.getElementById('recalculating-overlay');
-    if (recalculatingOverlay) recalculatingOverlay.classList.remove('hidden');
-
-    try {
-        state.tabs = [];
-        state.nextTabId = 0;
-        state.nextStickerId = 0;
-        
-        await executeImportTabs(projectData.tabs);
-
-        if (elements.headerProjectNameInput) {
-            const newName = file.name.replace('.spheroidproj', '');
-            elements.headerProjectNameInput.value = newName;
-        }
-        
-        // Find the correct index for the originally active tab
-        const originalActiveTabId = projectData.tabs[projectData.activeTabIndex]?.id;
-        let newActiveIndex = 0;
-        if (originalActiveTabId !== undefined) {
-            const foundIndex = state.tabs.findIndex(t => t.id === originalActiveTabId);
-            if (foundIndex > -1) {
-                newActiveIndex = foundIndex;
-            }
-        }
-
-        renderTabs();
-        switchTab(newActiveIndex, true);
-    } catch (error) {
-        console.error("Failed to execute load project:", error);
-        showToast("Erro ao processar abas selecionadas.", 5000);
-    } finally {
-        if (recalculatingOverlay) recalculatingOverlay.classList.add('hidden');
-    }
-}
-
-
 async function executeImportTabs(tabsToImport: any[]) {
     if (!tabsToImport || tabsToImport.length === 0) return;
 
     for (const tabData of tabsToImport) {
         const newTab = createNewTab(); // Gets a new ID
         
-        // Copy all saved properties from the file data to the new TabState instance.
-        // This includes 'name', 'currentAnalysisIndex', etc. but also 'analyses' as plain objects.
         Object.assign(newTab, tabData);
 
-        // We must re-create the 'analyses' and 'stickers' arrays with proper class instances.
         const analysesData = tabData.analyses || [];
         const stickersData = tabData.stickers || [];
         
         newTab.analyses = [];
         newTab.stickers = [];
 
-        // Restore stickers into StickerState instances
         for (const sData of stickersData) {
             const sticker = new StickerState(sData.id, sData.zIndex);
             Object.assign(sticker, sData);
@@ -370,251 +360,421 @@ async function executeImportTabs(tabsToImport: any[]) {
             if (sData.id >= state.nextStickerId) state.nextStickerId = sData.id + 1;
         }
 
-        // Restore analyses into ImageAnalysisState instances
         for (const analysisData of analysesData) {
-            if (analysisData.fileData) {
-                try {
-                    const file = base64ToFile(analysisData.fileData, analysisData.originalFilename);
-                    const analysis = new ImageAnalysisState(file);
-                    
-                    // Copy all saved properties from the loaded data into the new instance.
-                    // We exclude 'fileData' itself, as it has been converted to a 'file' object.
-                    const { fileData, ...restOfAnalysisData } = analysisData;
-                    Object.assign(analysis, restOfAnalysisData);
-                    
-                    newTab.analyses.push(analysis);
-                } catch (e) {
-                    console.error(`Error processing file ${analysisData.originalFilename} for tab ${tabData.name}:`, e);
-                }
+            if (!analysisData.fileData) continue;
+            try {
+                const file = base64ToFile(analysisData.fileData, analysisData.originalFilename);
+                const analysis = new ImageAnalysisState(file);
+                const { file: _, originalImage: __, fileData: ___, ...rest } = analysisData;
+                Object.assign(analysis, rest);
+                newTab.analyses.push(analysis);
+
+            } catch (error) {
+                console.error(`Error processing saved analysis for ${analysisData.originalFilename}`, error);
             }
         }
         
         state.tabs.push(newTab);
+        if (newTab.id >= state.nextTabId) state.nextTabId = newTab.id + 1;
     }
 }
 
 export async function loadProject(file: File, projectData: any, mode: 'replace' | 'add') {
-    if (!file || !projectData || !projectData.tabs) return;
+    const recalculatingOverlay = document.getElementById('recalculating-overlay');
+    if (recalculatingOverlay) recalculatingOverlay.classList.remove('hidden');
+
+    const originalActiveTabIndex = state.activeTabIndex;
 
     try {
         if (mode === 'replace') {
-            await executeLoadProject(projectData, file);
-        } else { // mode === 'add'
-            const recalculatingOverlay = document.getElementById('recalculating-overlay');
-            if (recalculatingOverlay) recalculatingOverlay.classList.remove('hidden');
-            try {
-                await executeImportTabs(projectData.tabs);
-                renderTabs();
-                // Switch to the first of the newly added tabs.
-                switchTab(state.tabs.length - projectData.tabs.length);
-            } finally {
-                if (recalculatingOverlay) recalculatingOverlay.classList.add('hidden');
-            }
+            state.tabs = [];
+            state.nextTabId = 0;
+            state.nextStickerId = 0;
         }
-    } catch (e) {
-        console.error("Falha ao carregar o projeto:", e);
-        showToast("Arquivo de projeto inválido ou corrompido.", 5000);
+        
+        await executeImportTabs(projectData.tabs);
+
+        if (mode === 'replace' && elements.headerProjectNameInput) {
+            const newName = file.name.replace('.spheroidproj', '');
+            elements.headerProjectNameInput.value = newName;
+        }
+        
+        // --- RECALCULATION LOGIC ---
+        for (const tab of state.tabs) {
+            for (const analysis of tab.analyses) {
+                // Only recalculate analyses that have a defined core contour
+                if (analysis.manualDrawnPath && analysis.manualDrawnPath.length > 2) {
+                    
+                    // 1. Ensure image data is loaded into an Image element
+                    if (!analysis.originalImage) {
+                        analysis.originalImage = await loadImagePromise(analysis.file);
+                    }
+
+                    // 2. Prepare hidden canvases for offscreen processing
+                    const { width, height } = analysis.originalImage;
+                    elements.originalCanvas.width = width;
+                    elements.originalCanvas.height = height;
+                    elements.processedImageCanvas.width = width;
+                    elements.processedImageCanvas.height = height;
+                    elements.originalCanvas.getContext('2d')!.drawImage(analysis.originalImage, 0, 0);
+                    
+                    // 3. Apply the current global image adjustment settings
+                    applyImageFilters(analysis);
+
+                    // 4. Recalculate all metrics using the latest formulas
+                    const morphologyResult = calculateMorphologicalMetrics(analysis.manualDrawnPath, elements.processedImageCanvas);
+                    const { centroid, ...morphology } = morphologyResult;
+
+                    if (centroid && centroid.x > 0) {
+                         const { x: centerX, y: centerY } = centroid;
+                         const coreRadius = analysis.manualDrawnPath.reduce((acc, p) => acc + Math.hypot(p.x - centerX, p.y - centerY), 0) / analysis.manualDrawnPath.length;
+                         const newCoreAnalysis = { centerX, centerY, coreRadius, cellCount: analysis.detectedParticles.length, morphology };
+                         analysis.lastAnalysisResult = { ...analysis.lastAnalysisResult, ...newCoreAnalysis };
+                         
+                         // Also recalculate derived metrics like migration distances
+                         calculateAndStoreMigrationMetricsForAnalysis(analysis);
+                    }
+                }
+            }
+
+            // 5. After recalculating all analyses in a tab, rebuild its cumulative results table from scratch
+            tab.cumulativeResults = tab.analyses
+                .map(createResultObject) // Use the pure function to generate result objects
+                .filter(result => result !== null); // Filter out any analyses that couldn't be processed
+            
+            // Mark all analyses as "saved" with the new data
+            tab.analyses.forEach(a => a.isCurrentAnalysisSaved = true);
+        }
+        // --- END RECALCULATION ---
+
+        let newActiveIndex = state.tabs.length - 1;
+        if (mode === 'replace') {
+            const originalActiveTabId = projectData.tabs[projectData.activeTabIndex]?.id;
+            newActiveIndex = 0;
+            if (originalActiveTabId !== undefined) {
+                const foundIndex = state.tabs.findIndex(t => t.id === originalActiveTabId);
+                if (foundIndex > -1) newActiveIndex = foundIndex;
+            }
+        } else {
+             const firstNewTabId = projectData.tabs[0]?.id;
+             if(firstNewTabId !== undefined) {
+                const foundIndex = state.tabs.findIndex(t => t.id === firstNewTabId);
+                if(foundIndex > -1) newActiveIndex = foundIndex;
+             }
+        }
+
+        renderTabs();
+        switchTab(newActiveIndex, true);
+        showToast('Projeto carregado e resultados recalculados com sucesso!');
+        
+    } catch (error) {
+        console.error("Failed to execute load project:", error);
+        showToast("Erro ao processar o projeto. Verifique o console para detalhes.", 5000);
+        state.activeTabIndex = originalActiveTabIndex; // Attempt to restore previous state
+        switchTab(state.activeTabIndex, true);
+    } finally {
+        if (recalculatingOverlay) recalculatingOverlay.classList.add('hidden');
     }
 }
 
+function parseTimeFromTabName(tabName: string): number | null {
+    // Normalize string: replace commas with dots for decimals
+    const normalizedName = tabName.replace(/,/g, '.');
+
+    // 1. Prioritize specific units like '24h' or '2d'
+    const unitMatch = normalizedName.match(/(\d+(?:\.\d+)?)\s*(h|d)/i);
+    if (unitMatch) {
+        let value = parseFloat(unitMatch[1]);
+        const unit = unitMatch[2].toLowerCase();
+        if (unit === 'h') {
+            value /= 24; // Convert hours to days
+        }
+        return value;
+    }
+
+    // 2. If no unit found, find the last number in the string
+    // This regex finds all sequences of digits, possibly with a decimal point.
+    const allNumbers = normalizedName.match(/\d+(?:\.\d+)?/g);
+    if (allNumbers && allNumbers.length > 0) {
+        // Get the last match from the array of found numbers
+        const lastNumberStr = allNumbers[allNumbers.length - 1];
+        return parseFloat(lastNumberStr);
+    }
+    
+    // 3. If no numbers are found at all
+    return null;
+}
+
+/**
+ * Populates the speed analysis panel with all available tabs, indicating which are usable.
+ */
 export function populateSpeedAnalysisPanel() {
-    const panel = elements.speedAnalysisPanel;
-    if (!panel) return;
+    const { speedAnalysisSelectAll, speedAnalysisTabSelection } = elements;
+    if (!speedAnalysisTabSelection) return;
 
-    const sourceDataContainer = panel.querySelector<HTMLElement>('#speed-analysis-source-data');
-    const resultsContainer = panel.querySelector<HTMLElement>('#speed-analysis-results');
-    const tabsSelectionContainer = panel.querySelector<HTMLElement>('#speed-analysis-tab-selection');
-    
-    if (!sourceDataContainer || !resultsContainer || !tabsSelectionContainer) return;
-    
-    // 1. Populate Tab Selection
-    tabsSelectionContainer.innerHTML = state.tabs.map((tab, i) => `
-        <label class="flex items-center space-x-2 p-1.5 rounded-md hover:bg-gray-700/50 cursor-pointer">
-            <input type="checkbox" data-tab-index="${i}" class="speed-tab-checkbox w-4 h-4 text-teal-500 bg-gray-700 border-gray-600 rounded focus:ring-teal-500">
-            <span class="text-sm truncate" title="${tab.name}">${tab.name}</span>
-        </label>
-    `).join('') || '<p class="text-xs text-gray-500 p-2">Nenhuma aba disponível.</p>';
+    speedAnalysisTabSelection.innerHTML = '';
 
-    // Event listener for tab checkboxes
-    tabsSelectionContainer.addEventListener('change', () => {
-        const selectedIndexes = Array.from(tabsSelectionContainer.querySelectorAll<HTMLInputElement>('.speed-tab-checkbox:checked')).map(cb => parseInt(cb.dataset.tabIndex || '-1'));
-        const sourceData = selectedIndexes.flatMap(i => state.tabs[i].cumulativeResults.map(r => ({ ...r, tabName: state.tabs[i].name }))).sort((a,b) => a.filename.localeCompare(b.filename));
+    const createTabCheckbox = (tab: TabState) => {
+        // A tab is analyzable if it contains at least one image with a defined spheroid core.
+        const hasAnalyzedImage = tab.analyses.some(a => a.lastAnalysisResult && a.lastAnalysisResult.centerX);
+        const isDisabled = !hasAnalyzedImage;
+        const disabledClass = isDisabled ? 'opacity-50 cursor-not-allowed' : '';
+        const title = isDisabled ? 'Esta aba não contém imagens com análise de núcleo concluída.' : `Analisar a aba ${tab.name}`;
+        const warningIcon = isDisabled ? '<span class="text-yellow-400" title="Dados de análise ausentes">⚠️</span>' : '';
 
-        sourceDataContainer.innerHTML = `
-            <table class="w-full text-xs">
-                <thead class="bg-gray-700/50 sticky top-0 backdrop-blur-sm"><tr>
-                    <th class="p-2 text-left">Aba</th><th class="p-2 text-left">Arquivo</th><th class="p-2 text-center w-24">Tempo (dias)</th>
-                </tr></thead>
-                <tbody>${sourceData.map((row, idx) => `
-                    <tr class="border-t border-gray-700/50" data-row-index="${idx}">
-                        <td class="p-2 truncate" title="${row.tabName}">${row.tabName}</td>
-                        <td class="p-2 truncate" title="${row.filename}">${row.filename}</td>
-                        <td contenteditable="true" class="p-2 text-center font-mono time-input bg-gray-800/50"></td>
-                    </tr>
-                `).join('')}</tbody>
-            </table>
+        return `
+            <label class="flex items-center space-x-2 p-1.5 rounded-md hover:bg-gray-700/50 ${disabledClass}" title="${title}">
+                <input type="checkbox" class="speed-tab-checkbox w-4 h-4 text-teal-500 bg-gray-700 border-gray-600 rounded focus:ring-teal-500" data-tab-id="${tab.id}" ${isDisabled ? 'disabled' : 'checked'}>
+                <span class="text-sm truncate flex-grow">${tab.name}</span>
+                ${warningIcon}
+            </label>
         `;
-    });
+    };
 
-    const calculateBtn = panel.querySelector('#calculate-speeds-btn');
-    calculateBtn?.addEventListener('click', () => {
-        if (!sourceDataContainer || !tabsSelectionContainer || !resultsContainer) return;
-        
-        const timeInputs = Array.from(sourceDataContainer.querySelectorAll<HTMLElement>('.time-input'));
-        const selectedIndexes = Array.from(tabsSelectionContainer.querySelectorAll<HTMLInputElement>('.speed-tab-checkbox:checked')).map(cb => parseInt(cb.dataset.tabIndex || '-1'));
-        const sourceData = selectedIndexes.flatMap(i => state.tabs[i].cumulativeResults.map(r => ({ ...r, tabName: state.tabs[i].name }))).sort((a,b) => a.filename.localeCompare(b.filename));
+    speedAnalysisTabSelection.innerHTML = state.tabs.map(createTabCheckbox).join('');
 
-        const dataWithTime = sourceData.map((row, i) => ({
-            ...row,
-            time: parseFloat(timeInputs[i].innerText.replace(',', '.'))
-        })).filter(row => !isNaN(row.time));
+    const checkboxes = speedAnalysisTabSelection.querySelectorAll<HTMLInputElement>('.speed-tab-checkbox');
+    const enabledCheckboxes = Array.from(checkboxes).filter(cb => !cb.disabled);
 
-        const analysisMode = (panel.querySelector<HTMLInputElement>('input[name="speed-analysis-mode"]:checked')?.value) || 'within-tabs';
-
-        resultsContainer.innerHTML = '';
-        resultsContainer.classList.remove('hidden');
-
-        const calculateAndRenderSpeeds = (data: any[], title: string) => {
-            const sortedData = data.sort((a, b) => a.time - b.time);
-            if (sortedData.length < 2) return false;
-    
-            const r1 = sortedData[0];
-            const r2 = sortedData[sortedData.length - 1];
-            const timeDiff = r2.time - r1.time;
-    
-            if (timeDiff <= 0) return false;
-    
-            const areaDiff = parseFloat(r2.migrationArea_um2) - parseFloat(r1.migrationArea_um2);
-            const cellDiff = r2.cellCount - r1.cellCount;
-            const spheroidGrowth = parseFloat(r2.coreRadius_um) - parseFloat(r1.coreRadius_um);
-            const maxMigrationDiff = parseFloat(r2.maxMigration_um) - parseFloat(r1.maxMigration_um);
-            const haloMigrationDiff = parseFloat(r2.haloMigration_um) - parseFloat(r1.haloMigration_um);
-    
-            const migrationSpeedArea = areaDiff / timeDiff;
-            const proliferationSpeed = cellDiff / timeDiff;
-            const spheroidGrowthSpeed = spheroidGrowth / timeDiff;
-            const maxMigrationSpeed = maxMigrationDiff / timeDiff;
-            const haloMigrationSpeed = haloMigrationDiff / timeDiff;
-    
-            const resultEl = document.createElement('div');
-            resultEl.className = 'bg-gray-800/50 p-2 rounded-md text-xs';
-            resultEl.innerHTML = `
-                <h4 class="font-semibold text-teal-400">${title} (Δt = ${timeDiff.toFixed(1)} dias)</h4>
-                <div class="mt-1 space-y-1">
-                    <div class="flex justify-between"><span>Vel. Crescimento (Raio):</span><span class="font-mono">${spheroidGrowthSpeed.toFixed(1)} µm/dia</span></div>
-                    <div class="flex justify-between"><span>Vel. Migração (Halo):</span><span class="font-mono">${haloMigrationSpeed.toFixed(1)} µm/dia</span></div>
-                    <div class="flex justify-between"><span>Vel. Migração (Máx):</span><span class="font-mono">${maxMigrationSpeed.toFixed(1)} µm/dia</span></div>
-                    <div class="flex justify-between pt-1 mt-1 border-t border-gray-700/50"><span>Vel. Migração (Área):</span><span class="font-mono">${migrationSpeedArea.toFixed(0)} µm²/dia</span></div>
-                    <div class="flex justify-between"><span>Vel. Proliferação (Células):</span><span class="font-mono">${proliferationSpeed.toFixed(0)} células/dia</span></div>
-                </div>
-            `;
-            resultsContainer.appendChild(resultEl);
-            return true;
+    if (speedAnalysisSelectAll) {
+        speedAnalysisSelectAll.checked = enabledCheckboxes.length > 0 && enabledCheckboxes.every(c => c.checked);
+        speedAnalysisSelectAll.onchange = () => {
+            enabledCheckboxes.forEach(cb => cb.checked = speedAnalysisSelectAll.checked);
+            updateSpeedAnalysisTable();
         };
-    
-        let calculationsSucceeded = false;
-    
-        if (analysisMode === 'within-tabs') {
-            const groupedByTab = dataWithTime.reduce((acc, row) => {
-                acc[row.tabName] = acc[row.tabName] || [];
-                acc[row.tabName].push(row);
-                return acc;
-            }, {} as Record<string, any[]>);
-    
-            for (const tabName in groupedByTab) {
-                const success = calculateAndRenderSpeeds(groupedByTab[tabName], tabName);
-                if (success) calculationsSucceeded = true;
+    }
+
+    checkboxes.forEach(cb => {
+        cb.onchange = () => {
+            if (speedAnalysisSelectAll) {
+                speedAnalysisSelectAll.checked = enabledCheckboxes.length > 0 && enabledCheckboxes.every(c => c.checked);
             }
-        } else { // 'all-together' mode
-            calculationsSucceeded = calculateAndRenderSpeeds(dataWithTime, 'Resultado Combinado');
-        }
-    
-        if (!calculationsSucceeded) {
-            resultsContainer.innerHTML = '<p class="text-xs text-amber-400 p-2">Dados insuficientes ou intervalo de tempo inválido para calcular velocidades.</p>';
-        }
+            updateSpeedAnalysisTable();
+        };
     });
 
+    updateSpeedAnalysisTable();
+}
 
-    // Paste data logic
-    const pasteArea = panel.querySelector<HTMLTextAreaElement>('#paste-data-area');
-    const loadPastedBtn = panel.querySelector<HTMLButtonElement>('#load-pasted-data-btn');
 
-    loadPastedBtn?.addEventListener('click', () => {
-        if (!sourceDataContainer || !pasteArea) return;
-        const text = pasteArea.value.trim();
-        if (!text) return;
+function updateSpeedAnalysisTable() {
+    const { speedAnalysisTimeMapping, speedAnalysisTabSelection } = elements;
+    if (!speedAnalysisTimeMapping || !speedAnalysisTabSelection) return;
+    
+    speedAnalysisTimeMapping.innerHTML = ''; // Clear previous content
 
-        const rows = text.split('\n').map(r => r.split('\t'));
-        if (rows.length === 0) return;
+    const checkedTabIds = Array.from(speedAnalysisTabSelection.querySelectorAll<HTMLInputElement>('.speed-tab-checkbox:checked'))
+        .map(cb => parseInt(cb.dataset.tabId!));
 
-        const allTableRows = Array.from(sourceDataContainer.querySelectorAll<HTMLElement>('tr[data-row-index]'));
-        if (allTableRows.length === 0) {
-            showToast("Primeiro selecione as abas para carregar a tabela de arquivos.", 4000);
-            return;
+    const tableBody = document.createElement('tbody');
+
+    state.tabs.forEach(tab => {
+        if (!checkedTabIds.includes(tab.id)) return;
+
+        const initialTime = parseTimeFromTabName(tab.name);
+
+        const row = document.createElement('tr');
+        row.dataset.tabId = String(tab.id);
+        row.className = 'border-b border-gray-700/50';
+
+        row.innerHTML = `
+            <td class="p-2 truncate" title="${tab.name}">
+                ${tab.name}
+            </td>
+            <td class="p-2">
+                <input type="number" step="any" class="speed-time-input w-24 bg-gray-900 border border-gray-600 rounded-md p-1 text-right" placeholder="dias" value="${initialTime !== null ? initialTime : ''}">
+            </td>
+        `;
+        tableBody.appendChild(row);
+    });
+
+    if (tableBody.children.length > 0) {
+        speedAnalysisTimeMapping.innerHTML = `<table class="w-full text-sm">
+            <thead class="bg-gray-800/50 text-xs uppercase text-gray-400">
+                <tr><th class="p-2 text-left">Aba</th><th class="p-2 text-right">Tempo (dias)</th></tr>
+            </thead>
+            <tbody>${tableBody.innerHTML}</tbody>
+        </table>`;
+    } else {
+        speedAnalysisTimeMapping.innerHTML = `<p class="text-xs text-gray-500 text-center p-4">Selecione uma aba válida para definir o tempo.</p>`;
+    }
+}
+
+
+export function calculateAndDisplaySpeeds() {
+    const { speedAnalysisTimeMapping, speedAnalysisResultsDisplay } = elements;
+    if (!speedAnalysisTimeMapping || !speedAnalysisResultsDisplay) return;
+
+    const metricKeys = ['coreRadius_um', 'haloMigration_um', 'maxMigration_um', 'migrationArea_um2', 'cellCount'];
+
+    // --- Step 1 & 2: Group all individual image results by time point ---
+    const resultsByTime = new Map<number, any[]>();
+    const rows = speedAnalysisTimeMapping.querySelectorAll<HTMLTableRowElement>('tr[data-tab-id]');
+    
+    for (const row of rows) {
+        const tabId = parseInt(row.dataset.tabId!);
+        const timeInput = row.querySelector<HTMLInputElement>('.speed-time-input');
+        const time = timeInput ? parseFloat(timeInput.value) : NaN;
+        const tab = state.tabs.find(t => t.id === tabId);
+
+        if (!tab || isNaN(time)) continue;
+
+        // CORRECTED: Use the stable, saved cumulative results, not the live analysis state.
+        const resultsForThisTab = tab.cumulativeResults;
+
+        if (resultsForThisTab.length > 0) {
+            if (!resultsByTime.has(time)) {
+                resultsByTime.set(time, []);
+            }
+            // The results are already result objects, just push them.
+            resultsByTime.get(time)!.push(...resultsForThisTab);
         }
+    }
 
-        let filenameIndex = 0; // default to first column
-        let timeIndex = 1; // default to second column
-        let foundFilenameInHeader = false;
-        let foundTimeInHeader = false;
+    // --- Step 3: Calculate averages for each time point ---
+    const timePointAverages = [];
+    for (const [time, results] of resultsByTime.entries()) {
+        const sums = Object.fromEntries(metricKeys.map(k => [k, 0]));
+        const counts = Object.fromEntries(metricKeys.map(k => [k, 0]));
 
-        const header = rows[0];
-        // A simple heuristic: if the first cell of the first row contains "arquivo" or "file", it's a header.
-        if (header.length > 0 && (header[0].toLowerCase().includes('arquivo') || header[0].toLowerCase().includes('file'))) {
-            header.forEach((col, i) => {
-                const lowerCol = col.toLowerCase().trim();
-                if (lowerCol.includes('arquivo') || lowerCol.includes('file')) {
-                    filenameIndex = i;
-                    foundFilenameInHeader = true;
+        for (const result of results) {
+            for (const key of metricKeys) {
+                const value = parseFloat(result[key]);
+                if (!isNaN(value)) {
+                    sums[key] += value;
+                    counts[key]++;
                 }
-                if (lowerCol.includes('tempo') || lowerCol.includes('time') || lowerCol.includes('dias') || lowerCol.includes('days')) {
-                    timeIndex = i;
-                    foundTimeInHeader = true;
-                }
-            });
+            }
         }
         
-        const hasHeader = foundFilenameInHeader || foundTimeInHeader;
-        const dataRows = hasHeader ? rows.slice(1) : rows;
-
-        const pastedDataMap = new Map<string, string>();
-        dataRows.forEach(row => {
-            if (row.length > filenameIndex && row.length > timeIndex) {
-                const filename = row[filenameIndex].trim();
-                const time = row[timeIndex].trim();
-                if (filename && time && !isNaN(parseFloat(time.replace(',', '.')))) {
-                    pastedDataMap.set(filename, time);
-                }
-            }
-        });
-
-        if (pastedDataMap.size === 0) {
-            if (foundFilenameInHeader && !foundTimeInHeader) {
-                showToast("Coluna 'Tempo' não encontrada. Adicione esta coluna na sua planilha antes de colar.", 6000);
-            } else {
-                showToast("Formato de dados inválido. Cole uma tabela com colunas 'Arquivo' e 'Tempo'.", 5000);
-            }
-            return;
+        const avgMetrics: { [key: string]: number } = {};
+        for (const key of metricKeys) {
+            avgMetrics[key] = counts[key] > 0 ? sums[key] / counts[key] : 0;
         }
 
-        let matchCount = 0;
-        allTableRows.forEach(tableRow => {
-            const filenameCell = tableRow.querySelector<HTMLElement>('td:nth-child(2)');
-            const timeInputCell = tableRow.querySelector<HTMLElement>('.time-input');
-            if (filenameCell && timeInputCell) {
-                const filenameInTable = filenameCell.getAttribute('title') || filenameCell.innerText;
-                if (pastedDataMap.has(filenameInTable)) {
-                    timeInputCell.innerText = pastedDataMap.get(filenameInTable)!.replace('.', ',');
-                    matchCount++;
-                }
-            }
+        timePointAverages.push({
+            time,
+            avgMetrics,
+            groupName: `Dia ${time}`
         });
+    }
 
-        if (matchCount > 0) {
-            showToast(`${matchCount} tempos foram carregados com sucesso.`, 3000);
-            pasteArea.value = '';
-        } else {
-            showToast("Nenhum nome de arquivo na tabela corresponde aos nomes no texto colado.", 4000);
-        }
+    // --- Step 4: Sort time points ---
+    const sortedTimePoints = timePointAverages.sort((a, b) => a.time - b.time);
+
+    if (sortedTimePoints.length < 2) {
+        showToast("Selecione pelo menos dois PONTOS DE TEMPO distintos com dados analisados.", 3000);
+        return;
+    }
+    
+    // --- Step 5: Calculate speeds for each interval ---
+    const intervalSpeeds: any[] = [];
+    for (let i = 0; i < sortedTimePoints.length - 1; i++) {
+        const group1 = sortedTimePoints[i];
+        const group2 = sortedTimePoints[i + 1];
+        const deltaTime = group2.time - group1.time;
+
+        if (deltaTime <= 0) continue;
+
+        const intervalResult: any = {
+            intervalName: `${group1.groupName} → ${group2.groupName}`,
+            deltaTime: deltaTime.toFixed(1)
+        };
+
+        metricKeys.forEach(key => {
+            const deltaValue = group2.avgMetrics[key] - group1.avgMetrics[key];
+            const speed = deltaValue / deltaTime;
+            intervalResult[key] = speed;
+        });
+        
+        intervalSpeeds.push(intervalResult);
+    }
+    
+    // --- Step 6: Calculate overall speed from the first to the last time point ---
+    const avgSpeeds: { [key: string]: string } = {};
+    const firstPoint = sortedTimePoints[0];
+    const lastPoint = sortedTimePoints[sortedTimePoints.length - 1];
+    const totalTime = lastPoint.time - firstPoint.time;
+
+    if (totalTime > 0) {
+        metricKeys.forEach(key => {
+            const totalDeltaValue = lastPoint.avgMetrics[key] - firstPoint.avgMetrics[key];
+            const overallSpeed = totalDeltaValue / totalTime;
+            avgSpeeds[key] = overallSpeed.toFixed(1);
+        });
+    } else {
+        metricKeys.forEach(key => { avgSpeeds[key] = '0.0'; }); // Default to 0 instead of N/A
+    }
+    
+    // Also store totalTime in avgSpeeds for easier display
+    avgSpeeds['totalTime'] = totalTime.toFixed(1);
+
+
+    if (intervalSpeeds.length === 0 && totalTime <= 0) {
+        showToast("Não foi possível calcular velocidades. Verifique se os tempos são sequenciais e positivos.", 4000);
+        return;
+    }
+
+    // --- Step 7: Display results ---
+    const metricDisplayInfo: { [key: string]: { name: string; unit: string } } = {
+        coreRadius_um: { name: 'Vel. Crescimento (Raio)', unit: 'µm/dia' },
+        haloMigration_um: { name: 'Vel. Migração (Halo)', unit: 'µm/dia' },
+        maxMigration_um: { name: 'Vel. Migração (Máx)', unit: 'µm/dia' },
+        migrationArea_um2: { name: 'Vel. Migração (Área)', unit: 'µm²/dia' },
+        cellCount: { name: 'Vel. Proliferação', unit: 'Células/dia' }
+    };
+
+    let avgTableHtml = `<details class="subsection-details" open>
+        <summary><h5 class="font-semibold text-gray-300 text-sm">Resultado Geral (Início ao Fim)</h5></summary>
+        <div class="subsection-content !p-2"><table class="w-full text-xs"><tbody>`;
+    metricKeys.forEach(key => {
+        const info = metricDisplayInfo[key];
+        avgTableHtml += `<tr class="border-b border-gray-700/50"><td class="py-1 pr-2 text-gray-400">${info.name}</td><td class="py-1 pl-2 text-right font-mono text-teal-300">${avgSpeeds[key]}</td></tr>`;
     });
+    avgTableHtml += `<tr class="border-b border-gray-700/50"><td class="py-1 pr-2 text-gray-400">Tempo Total (dias)</td><td class="py-1 pl-2 text-right font-mono">${totalTime.toFixed(1)}</td></tr></tbody></table></div></details>`;
+
+    let dailyTableHtml = '';
+    if (intervalSpeeds.length > 0) {
+        dailyTableHtml = `<details class="subsection-details mt-2" open>
+            <summary><h5 class="font-semibold text-gray-300 text-sm">Análise por Intervalo</h5></summary>
+            <div class="subsection-content !p-0 overflow-x-auto"><table class="w-full text-xs text-left">
+                <thead class="bg-gray-800/50 text-gray-400 uppercase"><tr>
+                    <th class="p-2">Intervalo</th>
+                    ${metricKeys.map(key => `<th class="p-2 text-right">${metricDisplayInfo[key].name.replace('Vel. ','')}</th>`).join('')}
+                    <th class="p-2 text-right">Tempo (dias)</th>
+                </tr></thead><tbody>`;
+        intervalSpeeds.forEach(interval => {
+            dailyTableHtml += `<tr class="border-b border-gray-700/50">
+                <td class="p-2 font-semibold truncate" title="${interval.intervalName}">${interval.intervalName}</td>
+                ${metricKeys.map(key => `<td class="p-2 text-right font-mono">${interval[key].toFixed(1)}</td>`).join('')}
+                <td class="p-2 text-right font-mono">${interval.deltaTime}</td>
+            </tr>`;
+        });
+        dailyTableHtml += `</tbody></table></div></details>`;
+    }
+    
+    const panelHeader = `<div class="popup-header flex items-center justify-between p-2 border-b border-gray-700">
+        <h3 class="font-bold text-base ml-2">Resultados de Velocidade</h3>
+        <div class="flex items-center gap-1">
+            <button id="copy-speed-results-btn" title="Copiar Resultados" class="p-2 rounded-md hover:bg-gray-700"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1-1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5-.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3z"/></svg></button>
+            <button id="close-speed-results-btn" title="Fechar" class="p-2 rounded-md hover:bg-gray-700"><svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg></button>
+        </div></div><div class="panel-content overflow-y-auto p-2">${avgTableHtml}${dailyTableHtml}</div><div class="resize-handle"></div>`;
+
+    speedAnalysisResultsDisplay.innerHTML = panelHeader;
+    speedAnalysisResultsDisplay.classList.remove('hidden');
+
+    document.getElementById('close-speed-results-btn')?.addEventListener('click', () => { speedAnalysisResultsDisplay.classList.add('hidden'); });
+    document.getElementById('copy-speed-results-btn')?.addEventListener('click', () => {
+        let text = 'Resultado Geral (Início ao Fim)\nMétrica\tValor\n';
+        metricKeys.forEach(key => { const info = metricDisplayInfo[key]; text += `${info.name}\t${avgSpeeds[key]}\n`; });
+        text += `Tempo Total (dias)\t${totalTime.toFixed(1)}\n\n`;
+
+        if (intervalSpeeds.length > 0) {
+            text += 'Análise por Intervalo\nIntervalo\t' + metricKeys.map(key => metricDisplayInfo[key].name.replace('Vel. ','')).join('\t') + '\tTempo (dias)\n';
+            intervalSpeeds.forEach(interval => { text += `${interval.intervalName}\t${metricKeys.map(key => interval[key].toFixed(1)).join('\t')}\t${interval.deltaTime}\n`; });
+        }
+        copyToClipboard(text, () => showToast('Resultados copiados!'));
+    });
+
+    import('../src/ui').then(m => m.makeDraggable(speedAnalysisResultsDisplay, '.popup-header'));
 }

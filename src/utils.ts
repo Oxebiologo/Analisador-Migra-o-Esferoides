@@ -5,7 +5,6 @@ import { scaleBarMicrometersInput, scaleBarPixelsInput } from "./elements";
  * A collection of pure utility functions used across the application.
  */
 
-// Fix: Updated function to accept an optional duration parameter to resolve argument mismatch error.
 export function showToast(message: string, duration = 2000) {
     const toast = document.getElementById('toast-notification');
     if (!toast) return;
@@ -83,7 +82,6 @@ export function simplifyPath(points: { x: number; y: number }[], tolerance: numb
     return simplified;
 }
 
-// Fix: Add and export the smoothPath function, required by src/analysis.ts.
 export function smoothPath(path: { x: number; y: number }[], windowSize: number): { x: number; y: number }[] {
     if (path.length < 3 || windowSize < 1) return path;
 
@@ -405,7 +403,6 @@ export function calculateMorphologicalMetrics(path: {x: number, y: number}[], ca
                 }
             });
             
-// Fix: Complete the reduce call to calculate meanGradient and add the calculation for varianceGradient.
             if (gradients.length > 0) {
                 meanGradient = gradients.reduce((sum, val) => sum + val, 0) / gradients.length;
                 varianceGradient = gradients.reduce((sum, val) => sum + (val - meanGradient)**2, 0) / gradients.length;

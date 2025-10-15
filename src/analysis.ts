@@ -3,7 +3,6 @@
  * contour refinement, and undo/redo history management.
  */
 
-// Fix: Import 'radiusResult' from './elements'
 import { loadingIndicator, processedImageCanvas, aiToleranceInput, radiusResult, brushSizeInput, paintSpheroidCanvas } from './elements';
 import { state, getActiveAnalysis, ImageAnalysisState } from './state';
 import { calculateMorphologicalMetrics, createRadialContour, simplifyPath, getConvexHull, showToast, findContourPointAtAngle, smoothPath } from './utils';
@@ -49,6 +48,8 @@ export function pushToHistory() {
 
     // Any action that modifies the analysis state means it's no longer "completed".
     analysis.isCompleted = false;
+    // Mark as unsaved so it gets added to cumulative results on next auto-save trigger.
+    analysis.isCurrentAnalysisSaved = false;
 
     // If we've undone actions and now make a new one, clear the "redo" history
     if (analysis.historyIndex < analysis.actionHistory.length - 1) {

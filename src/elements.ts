@@ -48,6 +48,12 @@ export const tabSelectCancel = document.getElementById('tab-select-cancel');
 export const tabSelectReplaceBtn = document.getElementById('tab-select-replace-btn');
 export const tabSelectAddBtn = document.getElementById('tab-select-add-btn');
 
+// Speed Analysis Panel Elements
+export const speedAnalysisTabSelection = document.getElementById('speed-analysis-tab-selection');
+export const speedAnalysisSelectAll = document.getElementById('speed-analysis-select-all') as HTMLInputElement;
+export const calculateSpeedsBtn = document.getElementById('calculate-speeds-btn') as HTMLButtonElement;
+export const speedAnalysisTimeMapping = document.getElementById('speed-analysis-time-mapping');
+export const speedAnalysisResultsDisplay = document.getElementById('speed-analysis-results-display');
 
 
 // Buttons & Interactive Elements
@@ -81,7 +87,6 @@ export const headerSpeedBtn = document.getElementById('header-speed-btn');
 export const headerShortcutsBtn = document.getElementById('header-shortcuts-btn');
 
 
-// Fix: Cast button elements to HTMLButtonElement to provide correct types for properties like 'disabled'.
 // Analysis Step Buttons
 export const convertTo8BitButton = document.getElementById('convertTo8BitButton') as HTMLButtonElement;
 export const paintSpheroidButton = document.getElementById('paintSpheroidButton') as HTMLButtonElement;
@@ -91,6 +96,8 @@ export const refineContourButton = document.getElementById('refineContourButton'
 export const undoPointButton = document.getElementById('undoPointButton') as HTMLButtonElement;
 export const setHaloPointButton = document.getElementById('setHaloPointButton') as HTMLButtonElement;
 export const setMigrationPointButton = document.getElementById('setMigrationPointButton') as HTMLButtonElement;
+export const deleteHaloPointButton = document.getElementById('deleteHaloPointButton') as HTMLButtonElement;
+export const deleteMigrationPointButton = document.getElementById('deleteMigrationPointButton') as HTMLButtonElement;
 export const drawMarginButton = document.getElementById('drawMarginButton') as HTMLButtonElement;
 export const paintMarginButton = document.getElementById('paintMarginButton') as HTMLButtonElement;
 export const smoothMarginButton = document.getElementById('smoothMarginButton') as HTMLButtonElement;
@@ -181,4 +188,4 @@ export const stickerContainer = document.getElementById('sticker-container') as 
 
 // Collections of elements for easier manipulation
 export const allCanvases = [originalCanvas, processedImageCanvas, paintCanvas, paintSpheroidCanvas, manualPaintCanvas, resultCanvas];
-export const allPopupPanels = [resultsContainer, brushControls, cumulativeResultsContainer, projectPanel, analysisWorkflowPanel, adjustmentsPanel, optionsPanel, shortcutsPanel, viewControlsPanel, speedAnalysisPanel, helpPanel];
+export const allPopupPanels = [resultsContainer, brushControls, cumulativeResultsContainer, projectPanel, analysisWorkflowPanel, adjustmentsPanel, optionsPanel, shortcutsPanel, viewControlsPanel, speedAnalysisPanel, helpPanel, speedAnalysisResultsDisplay];

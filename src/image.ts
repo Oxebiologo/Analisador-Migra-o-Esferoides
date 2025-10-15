@@ -98,6 +98,12 @@ function processAnalysis(analysis: ImageAnalysisState) {
 
     applyImageFilters(analysis); // This will also trigger a redraw
     resetView();
+    
+    // After loading from a project, if a contour exists, re-calculate derived metrics to ensure consistency.
+    if (analysis.lastAnalysisResult && analysis.lastAnalysisResult.centerX) {
+        import('./results').then(m => m.calculateAndStoreMigrationMetrics());
+    }
+    
     updateUIMode();
     updateFullscreenButton(!!document.fullscreenElement);
     
@@ -165,6 +171,10 @@ export function loadImageByIndex(index: number) {
     
     if (elements.nextImageButton) elements.nextImageButton.disabled = (index === activeTab.analyses.length - 1);
     if (elements.mainNextImageButton) elements.mainNextImageButton.disabled = (index === activeTab.analyses.length - 1);
+    
+    // Enable/disable delete buttons based on loaded analysis data
+    if (elements.deleteHaloPointButton) elements.deleteHaloPointButton.disabled = !analysis.haloRadiusData;
+    if (elements.deleteMigrationPointButton) elements.deleteMigrationPointButton.disabled = !(analysis.lastAnalysisResult && analysis.lastAnalysisResult.maxRadiusData);
 
     const loadImageAction = (image: HTMLImageElement) => {
         analysis.originalImage = image;
@@ -241,7 +251,8 @@ export function applyImageFilters(analysis: ImageAnalysisState) {
         const binarizedImageData = ctx.getImageData(0, 0, width, height);
         const binarizedData = binarizedImageData.data;
         const maskCanvas = document.createElement('canvas');
-        maskCanvas.width = width; maskCanvas.height = height;
+        maskCanvas.width = width;
+        maskCanvas.height = height;
         const maskCtx = maskCanvas.getContext('2d');
         if (maskCtx) {
             if (analysis.migrationMarginPath.length > 2) {
@@ -343,17 +354,34 @@ export function loadImagePromise(file: File): Promise<HTMLImageElement> {
             reader.onload = (e) => {
                 if (!e.target?.result) return reject(new Error("Failed to read TIFF file."));
                 try {
-                    const tiff = new (window as any).Tiff({ buffer: e.target.result });
-                    const canvas = tiff.toCanvas();
-                    if (canvas) {
+                    const ifds = (window as any).UTIF.decode(e.target.result);
+                    if (!ifds || ifds.length === 0) {
+                        return reject(new Error("Invalid TIFF file: No image data found."));
+                    }
+                    // Use the first image in the TIFF file
+                    const firstPage = ifds[0];
+                    (window as any).UTIF.decodeImage(e.target.result, firstPage);
+                    const rgba = (window as any).UTIF.toRGBA8(firstPage); // returns Uint8Array
+        
+                    const canvas = document.createElement('canvas');
+                    canvas.width = firstPage.width;
+                    canvas.height = firstPage.height;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        const imageData = ctx.createImageData(firstPage.width, firstPage.height);
+                        imageData.data.set(rgba);
+                        ctx.putImageData(imageData, 0, 0);
+        
                         const image = new Image();
                         image.onload = () => resolve(image);
                         image.onerror = (err) => reject(err);
                         image.src = canvas.toDataURL();
                     } else {
-                        reject(new Error("Failed to convert TIFF to canvas."));
+                        reject(new Error("Could not create canvas context to render TIFF."));
                     }
+        
                 } catch (tiffError) {
+                    console.error("UTIF decoding error:", tiffError);
                     reject(tiffError);
                 }
             };
