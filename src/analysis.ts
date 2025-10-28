@@ -1,8 +1,3 @@
-/**
- * This file contains the core logic for spheroid and particle analysis,
- * contour refinement, and undo/redo history management.
- */
-
 import { loadingIndicator, processedImageCanvas, aiToleranceInput, radiusResult, brushSizeInput, paintSpheroidCanvas } from './elements';
 import { state, getActiveAnalysis, ImageAnalysisState } from './state';
 import { calculateMorphologicalMetrics, createRadialContour, simplifyPath, getConvexHull, showToast, findContourPointAtAngle, smoothPath } from './utils';
@@ -21,6 +16,7 @@ function captureState(analysis: ImageAnalysisState) {
         haloRadiusData: analysis.haloRadiusData,
         lastAnalysisResult: analysis.lastAnalysisResult,
         isCompleted: analysis.isCompleted,
+        currentAnalysisStep: analysis.currentAnalysisStep,
     });
 }
 
@@ -31,10 +27,12 @@ function restoreState(analysis: ImageAnalysisState, historyState: any) {
     analysis.haloRadiusData = historyState.haloRadiusData;
     analysis.lastAnalysisResult = historyState.lastAnalysisResult;
     analysis.isCompleted = historyState.isCompleted;
+    analysis.currentAnalysisStep = historyState.currentAnalysisStep;
 
     // Trigger all necessary UI updates
     updateResultsDisplay();
     updateCellCounters();
+    goToWorkflowStep(analysis.currentAnalysisStep);
     state.isPaintLayerDirty = true; // Mark cell layer for redraw
     requestRedraw();
 }
@@ -141,7 +139,7 @@ export function analyzeSpheroid() {
         if (b) (b as HTMLButtonElement).disabled = false;
     });
 
-    if (analysis.currentAnalysisStep === 1) {
+    if (analysis.currentAnalysisStep === 0) {
         completeStepAndAdvance();
     }
     pushToHistory();
@@ -353,7 +351,7 @@ export function processPaintedSpheroid() {
         const contour = createRadialContour(paintedPoints, center);
         analysis.manualDrawnPath = simplifyPath(contour, 1.5);
         if (analysis.manualDrawnPath.length > 3) {
-            analysis.manualDrawnPath.push(analysis.manualDrawnPath[0]);
+            analysis.manualDrawnPath.push({ ...contour[0] });
         }
     }
     
@@ -400,7 +398,7 @@ export function processPaintedMargin() {
     updateResultsDisplay();
     requestRedraw();
     pushToHistory();
-    if (analysis.currentAnalysisStep === 4) {
+    if (analysis.currentAnalysisStep === 3) {
         // Don't auto-advance on the last step, wait for confirm button
     }
 }

@@ -8,7 +8,6 @@ export const imageLoader = document.getElementById('imageLoader') as HTMLInputEl
 export const newProjectButton = document.getElementById('newProjectButton') as HTMLButtonElement;
 export const saveProjectButton = document.getElementById('saveProjectButton') as HTMLButtonElement;
 export const resetButton = document.getElementById('resetButton') as HTMLButtonElement;
-export const saveAnalyzedButton = document.getElementById('saveAnalyzedButton') as HTMLButtonElement;
 export const headerProjectNameInput = document.getElementById('headerProjectNameInput') as HTMLInputElement;
 export const loadProjectInput = document.getElementById('loadProjectInput') as HTMLInputElement;
 
@@ -171,7 +170,7 @@ export const pixelInspector = document.getElementById('pixelInspector');
 export const bitStatus = document.getElementById('bitStatus');
 export const totalCellCounter = document.getElementById('totalCellCounter');
 export const imageNavStatus = document.getElementById('imageNavStatus');
-export const mainImageNavStatus = document.getElementById('main-imageNavStatus');
+export const mainImageInfo = document.getElementById('main-image-info');
 export const cumulativeResultTableContainer = document.getElementById('cumulativeResultTableContainer');
 export const cellCounterStatus = document.getElementById('cell-counter-status');
 export const workflowStepInstruction = document.getElementById('workflow-step-instruction');

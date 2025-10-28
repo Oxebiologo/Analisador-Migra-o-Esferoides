@@ -606,52 +606,47 @@ export function calculateAndDisplaySpeeds() {
     if (!speedAnalysisTimeMapping || !speedAnalysisResultsDisplay) return;
 
     const metricKeys = ['coreRadius_um', 'haloMigration_um', 'maxMigration_um', 'migrationArea_um2', 'cellCount'];
-
-    // --- Step 1 & 2: Group all individual image results by time point ---
-    const resultsByTime = new Map<number, any[]>();
+    
+    // Step 1: Aggregate data directly into sums and counts for each time point.
+    const timeData = new Map<number, { sums: Record<string, number>, counts: Record<string, number> }>();
     const rows = speedAnalysisTimeMapping.querySelectorAll<HTMLTableRowElement>('tr[data-tab-id]');
     
     for (const row of rows) {
-        const tabId = parseInt(row.dataset.tabId!);
+        const tabId = parseInt(row.dataset.tabId!, 10);
         const timeInput = row.querySelector<HTMLInputElement>('.speed-time-input');
         const time = timeInput ? parseFloat(timeInput.value) : NaN;
         const tab = state.tabs.find(t => t.id === tabId);
 
-        if (!tab || isNaN(time)) continue;
-
-        // CORRECTED: Use the stable, saved cumulative results, not the live analysis state.
-        const resultsForThisTab = tab.cumulativeResults;
-
-        if (resultsForThisTab.length > 0) {
-            if (!resultsByTime.has(time)) {
-                resultsByTime.set(time, []);
-            }
-            // The results are already result objects, just push them.
-            resultsByTime.get(time)!.push(...resultsForThisTab);
+        if (!tab || isNaN(time) || tab.cumulativeResults.length === 0) {
+            continue;
         }
-    }
 
-    // --- Step 3: Calculate averages for each time point ---
-    const timePointAverages = [];
-    for (const [time, results] of resultsByTime.entries()) {
-        const sums = Object.fromEntries(metricKeys.map(k => [k, 0]));
-        const counts = Object.fromEntries(metricKeys.map(k => [k, 0]));
+        if (!timeData.has(time)) {
+            timeData.set(time, {
+                sums: Object.fromEntries(metricKeys.map(k => [k, 0])),
+                counts: Object.fromEntries(metricKeys.map(k => [k, 0]))
+            });
+        }
+        const currentPointData = timeData.get(time)!;
 
-        for (const result of results) {
+        for (const result of tab.cumulativeResults) {
             for (const key of metricKeys) {
                 const value = parseFloat(result[key]);
                 if (!isNaN(value)) {
-                    sums[key] += value;
-                    counts[key]++;
+                    currentPointData.sums[key] += value;
+                    currentPointData.counts[key]++;
                 }
             }
         }
-        
+    }
+
+    // Step 2: Calculate the final average for each metric at each time point.
+    const timePointAverages: { time: number; avgMetrics: Record<string, number>; groupName: string }[] = [];
+    for (const [time, data] of timeData.entries()) {
         const avgMetrics: { [key: string]: number } = {};
         for (const key of metricKeys) {
-            avgMetrics[key] = counts[key] > 0 ? sums[key] / counts[key] : 0;
+            avgMetrics[key] = data.counts[key] > 0 ? data.sums[key] / data.counts[key] : 0;
         }
-
         timePointAverages.push({
             time,
             avgMetrics,
@@ -659,7 +654,7 @@ export function calculateAndDisplaySpeeds() {
         });
     }
 
-    // --- Step 4: Sort time points ---
+    // Step 3: Sort time points to ensure correct interval calculation.
     const sortedTimePoints = timePointAverages.sort((a, b) => a.time - b.time);
 
     if (sortedTimePoints.length < 2) {
@@ -667,7 +662,7 @@ export function calculateAndDisplaySpeeds() {
         return;
     }
     
-    // --- Step 5: Calculate speeds for each interval ---
+    // Step 4: Calculate speeds for each consecutive interval.
     const intervalSpeeds: any[] = [];
     for (let i = 0; i < sortedTimePoints.length - 1; i++) {
         const group1 = sortedTimePoints[i];
@@ -690,7 +685,7 @@ export function calculateAndDisplaySpeeds() {
         intervalSpeeds.push(intervalResult);
     }
     
-    // --- Step 6: Calculate overall speed from the first to the last time point ---
+    // Step 5: Calculate overall speed from the very first to the very last time point.
     const avgSpeeds: { [key: string]: string } = {};
     const firstPoint = sortedTimePoints[0];
     const lastPoint = sortedTimePoints[sortedTimePoints.length - 1];
@@ -703,19 +698,17 @@ export function calculateAndDisplaySpeeds() {
             avgSpeeds[key] = overallSpeed.toFixed(1);
         });
     } else {
-        metricKeys.forEach(key => { avgSpeeds[key] = '0.0'; }); // Default to 0 instead of N/A
+        metricKeys.forEach(key => { avgSpeeds[key] = '0.0'; });
     }
     
-    // Also store totalTime in avgSpeeds for easier display
     avgSpeeds['totalTime'] = totalTime.toFixed(1);
-
 
     if (intervalSpeeds.length === 0 && totalTime <= 0) {
         showToast("Não foi possível calcular velocidades. Verifique se os tempos são sequenciais e positivos.", 4000);
         return;
     }
 
-    // --- Step 7: Display results ---
+    // Step 6: Display results.
     const metricDisplayInfo: { [key: string]: { name: string; unit: string } } = {
         coreRadius_um: { name: 'Vel. Crescimento (Raio)', unit: 'µm/dia' },
         haloMigration_um: { name: 'Vel. Migração (Halo)', unit: 'µm/dia' },

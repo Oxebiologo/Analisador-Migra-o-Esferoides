@@ -4,6 +4,39 @@
 
 type Point = { x: number; y: number };
 
+// FIX: Define and export AdjustmentState interface for type safety.
+export interface AdjustmentState {
+    brightness: number;
+    contrast: number;
+    sharpness: number;
+    highlights: number;
+    shadows: number;
+    whites: number;
+    blacks: number;
+    invert: boolean;
+    binarize: boolean;
+    binaryThreshold: number;
+    backgroundTolerance: number;
+    backgroundColorToSubtract: { r: number, g: number, b: number } | null;
+}
+
+// FIX: Define and export default adjustment values.
+export const defaultAdjustments: AdjustmentState = {
+    brightness: 0,
+    contrast: 0,
+    sharpness: 0,
+    highlights: 0,
+    shadows: 0,
+    whites: 255,
+    blacks: 0,
+    invert: false,
+    binarize: false,
+    binaryThreshold: 128,
+    backgroundTolerance: 10,
+    backgroundColorToSubtract: null,
+};
+
+
 export let nextStickerId = 0;
 
 export class StickerState {
@@ -36,6 +69,9 @@ export class ImageAnalysisState {
     originalImage: HTMLImageElement | null = null;
     originalFilename: string;
     is8Bit: boolean = false;
+
+    // Image-specific adjustments, null if it uses tab/global settings
+    adjustments: AdjustmentState | null = null;
 
     // Analysis State
     lastAnalysisResult: any = {};
@@ -74,6 +110,9 @@ export class TabState {
     // Tab-level cumulative results and stickers
     cumulativeResults: any[] = [];
     stickers: StickerState[] = [];
+    
+    // FIX: Add adjustments property to TabState.
+    adjustments: AdjustmentState = { ...defaultAdjustments };
 
     constructor(id: number, name: string) {
         this.id = id;
@@ -93,8 +132,11 @@ export const state = {
     minimizedPanels: [] as string[],
     nextTabId: 0,
     nextStickerId: 0,
+    // FIX: Add adjustmentScope and globalAdjustments for managing image filter settings.
+    adjustmentScope: 'tab' as 'tab' | 'global',
+    globalAdjustments: { ...defaultAdjustments },
     currentMode: null as string | null,
-    backgroundColorToSubtract: null as { r: number; g: number; b: number } | null,
+    // FIX: Remove backgroundColorToSubtract as it's now part of the adjustments state.
     zoom: 1,
     pan: { x: 0, y: 0 },
     panStart: { x: 0, y: 0 },
@@ -146,4 +188,25 @@ export function getActiveAnalysis(): ImageAnalysisState | null {
         return activeTab.analyses[activeTab.currentAnalysisIndex];
     }
     return null;
+}
+
+/**
+ * Gets the currently effective adjustment settings based on the scope (image, tab, or global).
+ */
+export function getEffectiveAdjustments(): AdjustmentState {
+    const analysis = getActiveAnalysis();
+    const activeTab = getActiveTab();
+
+    // Priority 1: Image-specific adjustments if they exist.
+    if (analysis?.adjustments) {
+        return analysis.adjustments;
+    }
+
+    // Priority 2: Tab-specific adjustments if scope is 'tab'.
+    if (activeTab && state.adjustmentScope === 'tab') {
+        return activeTab.adjustments;
+    }
+    
+    // Fallback: Global adjustments.
+    return state.globalAdjustments;
 }

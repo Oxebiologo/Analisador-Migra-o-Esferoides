@@ -1,7 +1,7 @@
 import * as elements from './elements';
-import { state, getActiveTab, createNewTab, TabState, StickerState, getActiveAnalysis } from './state';
+import { state, getActiveTab, createNewTab, TabState, StickerState, getActiveAnalysis, AdjustmentState, getEffectiveAdjustments } from './state';
 import { requestRedraw } from './canvas';
-import { loadImageByIndex } from './image';
+import { loadImageByIndex, resetTabToEmpty } from './image';
 import { addToCumulativeResults } from './results';
 
 const panelMetadata: { [key: string]: { title: string; icon: string; panelEl: HTMLElement | null } } = {
@@ -26,13 +26,54 @@ export function setMode(newMode: string | null) {
     updateUIMode();
 }
 
+export function updateBrushToolsUI() {
+    if (!elements.brushToolPaint || !elements.brushToolErase) return;
+    elements.brushToolPaint.classList.toggle('active', !state.isErasing);
+    elements.brushToolErase.classList.toggle('active', state.isErasing);
+}
+
+export function updateAdjustmentUI() {
+    const analysis = getActiveAnalysis();
+    
+    const imageRadio = document.getElementById('adjustment-mode-image') as HTMLInputElement;
+    const tabRadio = document.getElementById('adjustment-mode-tab') as HTMLInputElement;
+    const globalRadio = document.getElementById('adjustment-mode-global') as HTMLInputElement;
+
+    if (analysis?.adjustments) { if (imageRadio) imageRadio.checked = true; } 
+    else { if (state.adjustmentScope === 'tab') { if (tabRadio) tabRadio.checked = true; } else { if (globalRadio) globalRadio.checked = true; } }
+    
+    const adjustments = getEffectiveAdjustments();
+
+    if (elements.brightnessInput) elements.brightnessInput.value = String(adjustments.brightness);
+    if (elements.brightnessNumber) elements.brightnessNumber.value = String(adjustments.brightness);
+    if (elements.contrastInput) elements.contrastInput.value = String(adjustments.contrast);
+    if (elements.contrastNumber) elements.contrastNumber.value = String(adjustments.contrast);
+    if (elements.sharpnessInput) elements.sharpnessInput.value = String(adjustments.sharpness);
+    if (elements.sharpnessNumber) elements.sharpnessNumber.value = String(adjustments.sharpness);
+    if (elements.highlightsInput) elements.highlightsInput.value = String(adjustments.highlights);
+    if (elements.highlightsNumber) elements.highlightsNumber.value = String(adjustments.highlights);
+    if (elements.shadowsInput) elements.shadowsInput.value = String(adjustments.shadows);
+    if (elements.shadowsNumber) elements.shadowsNumber.value = String(adjustments.shadows);
+    if (elements.whitesInput) elements.whitesInput.value = String(adjustments.whites);
+    if (elements.whitesNumber) elements.whitesNumber.value = String(adjustments.whites);
+    if (elements.blacksInput) elements.blacksInput.value = String(adjustments.blacks);
+    if (elements.blacksNumber) elements.blacksNumber.value = String(adjustments.blacks);
+    if (elements.binaryThresholdInput) elements.binaryThresholdInput.value = String(adjustments.binaryThreshold);
+    if (elements.binaryThresholdNumber) elements.binaryThresholdNumber.value = String(adjustments.binaryThreshold);
+    if (elements.backgroundToleranceInput) elements.backgroundToleranceInput.value = String(adjustments.backgroundTolerance);
+    if (elements.backgroundToleranceNumber) elements.backgroundToleranceNumber.value = String(adjustments.backgroundTolerance);
+    if (elements.invertCheckbox) elements.invertCheckbox.checked = adjustments.invert;
+    if (elements.binarizeCheckbox) elements.binarizeCheckbox.checked = adjustments.binarize;
+    
+    const bgPreview = document.getElementById('backgroundColorPreview') as HTMLElement;
+    if(bgPreview) bgPreview.style.backgroundColor = adjustments.backgroundColorToSubtract ? `rgb(${adjustments.backgroundColorToSubtract.r}, ${adjustments.backgroundColorToSubtract.g}, ${adjustments.backgroundColorToSubtract.b})` : 'transparent';
+}
+
 export function updateUIMode() {
     const analysis = getActiveAnalysis();
-
     document.querySelectorAll('.manual-button').forEach(b => b.classList.remove('active'));
     if (elements.brushControls) elements.brushControls.classList.add('hidden');
     if (elements.magicWandControls) elements.magicWandControls.classList.add('hidden');
-    
     let statusText = '', cursorStyle = 'grab';
 
     if (state.paintModeContext) {
@@ -40,11 +81,9 @@ export function updateUIMode() {
         cursorStyle = 'crosshair';
         if (state.paintModeContext === 'spheroid') statusText = 'Pinte sobre o esferoide.';
         else if (state.paintModeContext === 'margin') statusText = 'Pinte a área de migração.';
-        else if (state.paintModeContext === 'eraser') statusText = 'Use o pincel para apagar partes da pintura.';
     } else if (state.currentMode) {
         const activeBtn = document.querySelector(`.manual-button[data-mode="${state.currentMode}"]`) || document.getElementById(state.currentMode + 'Button');
         activeBtn?.classList.add('active');
-
         switch (state.currentMode) {
             case 'drawSpheroid': statusText = 'Clique e arraste para desenhar o contorno.'; cursorStyle = 'crosshair'; break;
             case 'magicPaint': statusText = 'Clique no esferoide para seleção mágica.'; cursorStyle = 'crosshair'; if (elements.magicWandControls) elements.magicWandControls.classList.remove('hidden'); break;
@@ -73,24 +112,17 @@ export function updateUIMode() {
 
 export function renderMinimizedPanels() {
     if (!elements.minimizedPanelsBar) return;
-    const minimizedPanels = state.minimizedPanels.map(key => {
+    const panelButtons = Array.from(elements.minimizedPanelsBar.querySelectorAll('[data-panel-key]'));
+    panelButtons.forEach(btn => btn.remove());
+    state.minimizedPanels.forEach(key => {
         const meta = panelMetadata[key];
-        if (!meta) return null;
+        if (!meta) return;
         const button = document.createElement('button');
         button.className = 'flex w-14 h-14 bg-gray-800/80 backdrop-blur-sm border border-gray-700 rounded-full shadow-2xl items-center justify-center hover:bg-gray-700 transition-all';
         button.title = `Restaurar ${meta.title}`;
         button.dataset.panelKey = key;
         button.innerHTML = meta.icon;
-        return button;
-    }).filter(Boolean);
-
-    // This will be called from renderStickers, so we need to clear previous content
-    // and then let renderStickers append its own items.
-    const panelButtons = elements.minimizedPanelsBar.querySelectorAll('[data-panel-key]');
-    panelButtons.forEach(btn => btn.remove());
-    
-    minimizedPanels.forEach(button => {
-        if (button) elements.minimizedPanelsBar.prepend(button);
+        elements.minimizedPanelsBar.prepend(button);
     });
 }
 
@@ -98,9 +130,7 @@ export function minimizePanel(key: string) {
     const meta = panelMetadata[key];
     if (!meta || !meta.panelEl) return;
     meta.panelEl.classList.add('hidden');
-    if (!state.minimizedPanels.includes(key)) {
-        state.minimizedPanels.push(key);
-    }
+    if (!state.minimizedPanels.includes(key)) state.minimizedPanels.push(key);
     renderMinimizedPanels();
 }
 
@@ -111,7 +141,6 @@ export function restorePanel(key: string) {
     state.minimizedPanels = state.minimizedPanels.filter(p => p !== key);
     renderMinimizedPanels();
 }
-
 
 export function updateCellCounters() {
     const analysis = getActiveAnalysis();
@@ -128,73 +157,48 @@ export function updateFullscreenButton(isFullscreen: boolean) {
 }
 
 export function setSaveButtonState(disabled: boolean) {
-    if (elements.saveAnalyzedButton) elements.saveAnalyzedButton.disabled = disabled;
     if (elements.addCumulativeButton) elements.addCumulativeButton.disabled = disabled;
-    // Do NOT disable the saveProjectButton here, it should always be available.
 }
 
 export function makeDraggable(popup: HTMLElement, handleSelector?: string) {
     const handle = handleSelector ? popup.querySelector(handleSelector) as HTMLElement : popup;
     if (!handle) return;
-
     let lastX: number, lastY: number;
-
     const onDragStart = (clientX: number, clientY: number) => {
-        // Prevent dragging on mobile where panels are drawers
-        if (window.innerWidth <= 768) {
-            return;
-        }
-        lastX = clientX;
-        lastY = clientY;
+        if (window.innerWidth <= 768) return;
+        const rect = popup.getBoundingClientRect();
+        if (!popup.style.width) popup.style.width = `${rect.width}px`;
+        if (!popup.style.height) popup.style.height = `${rect.height}px`;
+        popup.style.top = `${popup.offsetTop}px`;
+        popup.style.left = `${popup.offsetLeft}px`;
+        popup.style.bottom = 'auto'; popup.style.right = 'auto';
+        lastX = clientX; lastY = clientY;
         document.addEventListener('mousemove', onMouseDragMove);
         document.addEventListener('mouseup', onDragEnd);
         document.addEventListener('touchmove', onTouchDragMove, { passive: false });
         document.addEventListener('touchend', onDragEnd);
     };
-
     const onDragMove = (clientX: number, clientY: number) => {
-        const dx = clientX - lastX;
-        const dy = clientY - lastY;
-        lastX = clientX;
-        lastY = clientY;
+        const dx = clientX - lastX, dy = clientY - lastY;
+        lastX = clientX; lastY = clientY;
         popup.style.top = (popup.offsetTop + dy) + "px";
         popup.style.left = (popup.offsetLeft + dx) + "px";
     };
-    
-    const onMouseDragMove = (e: MouseEvent) => {
-        onDragMove(e.clientX, e.clientY);
+    const onMouseDragMove = (e: MouseEvent) => onDragMove(e.clientX, e.clientY);
+    const onTouchDragMove = (e: TouchEvent) => { e.preventDefault(); if (e.touches.length > 0) onDragMove(e.touches[0].clientX, e.touches[0].clientY); };
+    const onDragEnd = () => { document.removeEventListener('mousemove', onMouseDragMove); document.removeEventListener('mouseup', onDragEnd); document.removeEventListener('touchmove', onTouchDragMove); document.removeEventListener('touchend', onDragEnd); };
+    const onMouseDown = (e: MouseEvent) => { 
+        if ((e.target as HTMLElement).closest('button, input, select, textarea, a, label')) return;
+        e.preventDefault(); 
+        onDragStart(e.clientX, e.clientY); 
     };
-    
-    const onTouchDragMove = (e: TouchEvent) => {
-        e.preventDefault();
-        if (e.touches.length > 0) {
-            onDragMove(e.touches[0].clientX, e.touches[0].clientY);
-        }
+    const onTouchStart = (e: TouchEvent) => { 
+        if ((e.target as HTMLElement).closest('button, input, select, textarea, a, label')) return; 
+        if (e.touches.length === 1) { 
+            e.preventDefault(); 
+            onDragStart(e.touches[0].clientX, e.touches[0].clientY); 
+        } 
     };
-
-    const onDragEnd = () => {
-        document.removeEventListener('mousemove', onMouseDragMove);
-        document.removeEventListener('mouseup', onDragEnd);
-        document.removeEventListener('touchmove', onTouchDragMove);
-        document.removeEventListener('touchend', onDragEnd);
-    };
-
-    const onMouseDown = (e: MouseEvent) => {
-        const target = e.target as HTMLElement;
-        if (target.closest('button, input, select, textarea, a')) return;
-        e.preventDefault();
-        onDragStart(e.clientX, e.clientY);
-    };
-
-    const onTouchStart = (e: TouchEvent) => {
-        const target = e.target as HTMLElement;
-        if (target.closest('button, input, select, textarea, a')) return;
-        if (e.touches.length === 1) {
-            e.preventDefault();
-            onDragStart(e.touches[0].clientX, e.touches[0].clientY);
-        }
-    };
-
     handle.addEventListener('mousedown', onMouseDown);
     handle.addEventListener('touchstart', onTouchStart, { passive: false });
 }
@@ -205,21 +209,11 @@ function makeResizable(popup: HTMLElement) {
     handle.addEventListener('mousedown', (e) => {
         e.preventDefault(); e.stopPropagation();
         let initW = popup.offsetWidth, initH = popup.offsetHeight, initX = e.clientX, initY = e.clientY;
-        const onMouseMove = (ev: MouseEvent) => {
-            popup.style.width = (initW + ev.clientX - initX) + 'px';
-            popup.style.height = (initH + ev.clientY - initY) + 'px';
-        };
+        const onMouseMove = (ev: MouseEvent) => { popup.style.width = (initW + ev.clientX - initX) + 'px'; popup.style.height = (initH + ev.clientY - initY) + 'px'; };
         const onMouseUp = () => { document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); };
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
     });
-}
-
-export function syncCheckboxes(checkbox1: HTMLInputElement | null, checkbox2: HTMLInputElement | null) {
-    if (!checkbox1 || !checkbox2) return;
-    const sync = (s: HTMLInputElement, t: HTMLInputElement) => { if (s.checked !== t.checked) { t.checked = s.checked; t.dispatchEvent(new Event('input', { bubbles: true })); } };
-    checkbox1.addEventListener('change', () => sync(checkbox1, checkbox2));
-    checkbox2.addEventListener('change', () => sync(checkbox2, checkbox1));
 }
 
 export function initializePanels() {
@@ -233,27 +227,16 @@ export function initializePanels() {
         'speed': { btn: 'header-speed-btn', panel: 'speed-analysis-panel', content: ['speed-analysis-section'], title: 'Análise de Velocidade' },
         'help': { btn: 'header-help-btn', panel: 'help-panel', content: ['help-section'], title: 'Ajuda & Tutorial' }
     };
-
     for (const key in panels) {
         const p = panels[key as keyof typeof panels];
-        const panelEl = document.getElementById(p.panel) as HTMLElement;
-        const buttonEl = document.getElementById(p.btn);
+        const panelEl = document.getElementById(p.panel) as HTMLElement, buttonEl = document.getElementById(p.btn);
         if (panelEl && buttonEl) {
             panelEl.innerHTML = `<div class="popup-header flex items-center justify-between p-2 border-b border-gray-700"><h3 class="font-bold text-base ml-2">${p.title}</h3><button class="close-panel-btn p-1 rounded-md hover:bg-gray-700"><svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg></button></div><div class="panel-content overflow-y-auto"></div><div class="resize-handle"></div>`;
             const contentContainer = panelEl.querySelector('.panel-content');
-            p.content.forEach(id => {
-                const contentEl = document.getElementById(id);
-                if (contentEl) contentContainer?.appendChild(contentEl);
-            });
+
+            p.content.forEach(id => { const contentEl = document.getElementById(id); if (contentEl) contentContainer?.appendChild(contentEl); });
             makeDraggable(panelEl, '.popup-header'); makeResizable(panelEl);
-            
-            buttonEl.addEventListener('click', () => {
-                panelEl.classList.toggle('hidden');
-                buttonEl.classList.toggle('active', !panelEl.classList.contains('hidden'));
-                if (key === 'speed' && !panelEl.classList.contains('hidden')) {
-                    import('./results').then(m => m.populateSpeedAnalysisPanel());
-                }
-            });
+            buttonEl.addEventListener('click', () => { panelEl.classList.toggle('hidden'); buttonEl.classList.toggle('active', !panelEl.classList.contains('hidden')); if (key === 'speed' && !panelEl.classList.contains('hidden')) import('./results').then(m => m.populateSpeedAnalysisPanel()); });
             panelEl.querySelector('.close-panel-btn')?.addEventListener('click', () => { panelEl.classList.add('hidden'); buttonEl.classList.remove('active'); });
         }
     }
@@ -264,71 +247,40 @@ export function initializePanels() {
 
 export function goToWorkflowStep(index: number) {
     const analysis = getActiveAnalysis();
-    if (!analysis || index < 0 || index > 4) return;
-    
-    // Handle completed analyses: show final state, allow editing, but don't auto-start tools.
+    if (!analysis || index < 0 || index > 3) return;
     if (analysis.isCompleted) {
-        // Mark all steps as done and clickable
-        document.getElementById('workflow-stepper')?.querySelectorAll<HTMLElement>('.workflow-step').forEach(stepEl => {
-            stepEl.classList.add('step-done', 'clickable');
-            stepEl.classList.remove('step-active', 'opacity-50', 'pointer-events-none');
-        });
-        // Hide all step content areas
-        document.getElementById('workflow-step-content-container')?.querySelectorAll<HTMLElement>('.step-content-item').forEach(contentEl => {
-            contentEl.classList.remove('active');
-        });
-        if (elements.workflowStepInstruction) {
-            elements.workflowStepInstruction.textContent = 'Análise concluída. Clique em uma etapa para editar.';
-        }
-        analysis.currentAnalysisStep = 4; // Visually show it's at the end
-        setMode(null); // Ensure no tool is active
-        return; // Exit before tool activation logic
+        document.getElementById('workflow-stepper')?.querySelectorAll<HTMLElement>('.workflow-step').forEach(stepEl => { stepEl.classList.add('step-done', 'clickable'); stepEl.classList.remove('step-active'); });
+        document.getElementById('workflow-step-content-container')?.querySelectorAll<HTMLElement>('.step-content-item').forEach(contentEl => contentEl.classList.remove('active'));
+        if (elements.workflowStepInstruction) elements.workflowStepInstruction.textContent = 'Análise concluída. Clique em uma etapa para editar.';
+        analysis.currentAnalysisStep = 3;
+        setMode(null);
+        return;
     }
-
     analysis.currentAnalysisStep = index;
     const coreStepComplete = analysis.manualDrawnPath.length > 0;
     document.getElementById('workflow-stepper')?.querySelectorAll<HTMLElement>('.workflow-step').forEach((stepEl, i) => {
         stepEl.classList.remove('step-active', 'step-done', 'clickable', 'opacity-50', 'pointer-events-none');
-        if (i < index) stepEl.classList.add('step-done');
-        else if (i === index) stepEl.classList.add('step-active');
-        const isUnlocked = i <= 1 || coreStepComplete;
-        if (isUnlocked) stepEl.classList.add('clickable');
-        else stepEl.classList.add('opacity-50', 'pointer-events-none');
+        if (i < index) stepEl.classList.add('step-done'); else if (i === index) stepEl.classList.add('step-active');
+        if (i === 0 || coreStepComplete) stepEl.classList.add('clickable'); else stepEl.classList.add('opacity-50', 'pointer-events-none');
     });
     document.getElementById('workflow-step-content-container')?.querySelectorAll<HTMLElement>('.step-content-item').forEach(contentEl => {
         contentEl.classList.toggle('active', parseInt(contentEl.dataset.step || '-1') === index);
     });
 
     if (elements.workflowStepInstruction) {
-        let instruction = '';
-        setMode(null);
-
+        let instruction = ''; setMode(null);
         switch (index) {
-            case 0:
-                instruction = 'Converta a imagem para 8-bit, se necessário.';
-                break;
-            case 1:
-                instruction = 'Pinte ou desenhe o contorno do núcleo do esferoide.';
-                break;
-            case 2:
-                instruction = 'Marque o ponto do halo e o ponto de migração máxima.';
-                break;
-            case 3:
-                instruction = 'Adicione ou remova as células na área de migração.';
-                break;
-            case 4:
-                instruction = 'Defina a borda externa da área de migração.';
-                break;
+            case 0: instruction = 'Pinte ou desenhe o contorno do núcleo do esferoide.'; break;
+            case 1: instruction = 'Marque o ponto do halo e o ponto de migração máxima.'; break;
+            case 2: instruction = 'Adicione ou remova as células na área de migração.'; break;
+            case 3: instruction = 'Defina a borda externa da área de migração.'; break;
         }
         elements.workflowStepInstruction.textContent = instruction;
     }
 }
 
 export function activateStepWorkflow() {
-    if (elements.analysisWorkflowPanel) {
-        elements.analysisWorkflowPanel.classList.remove('hidden');
-        document.getElementById('header-analysis-btn')?.classList.add('active');
-    }
+    if (elements.analysisWorkflowPanel) { elements.analysisWorkflowPanel.classList.remove('hidden'); document.getElementById('header-analysis-btn')?.classList.add('active'); }
     goToWorkflowStep(0);
 }
 
@@ -336,7 +288,7 @@ export function completeStepAndAdvance() {
     const analysis = getActiveAnalysis();
     if (!analysis) return;
     const nextStep = analysis.currentAnalysisStep + 1;
-    if (nextStep <= 4) goToWorkflowStep(nextStep);
+    if (nextStep <= 3) goToWorkflowStep(nextStep);
 }
 
 export function renderTabs() {
@@ -347,7 +299,7 @@ export function renderTabs() {
         const tabEl = document.createElement('div');
         tabEl.className = `tab-item flex items-center justify-between gap-2 px-3 py-1.5 border-b-2 text-sm cursor-pointer hover:bg-gray-700/50 flex-shrink-0 ${index === state.activeTabIndex ? 'active' : ''}`;
         tabEl.dataset.index = String(index);
-        tabEl.draggable = true; // Enable dragging for reordering
+        tabEl.draggable = true;
         tabEl.innerHTML = `<span class="tab-name truncate" title="${tab.name}">${tab.name}</span><button class="tab-close-btn p-1 rounded-full hover:bg-gray-600"><svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg></button>`;
         tabsContainer.appendChild(tabEl);
     });
@@ -364,12 +316,7 @@ export function renameTab(index: number, nameEl: HTMLElement) {
     nameEl.contentEditable = 'true'; nameEl.focus();
     const selection = window.getSelection(); const range = document.createRange();
     range.selectNodeContents(nameEl); selection?.removeAllRanges(); selection?.addRange(range);
-    const onBlur = () => {
-        nameEl.contentEditable = 'false';
-        state.tabs[index].name = nameEl.textContent?.trim() || oldName;
-        nameEl.textContent = state.tabs[index].name;
-        cleanup();
-    };
+    const onBlur = () => { nameEl.contentEditable = 'false'; state.tabs[index].name = nameEl.textContent?.trim() || oldName; nameEl.textContent = state.tabs[index].name; cleanup(); };
     const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); } else if (e.key === 'Escape') { nameEl.textContent = oldName; nameEl.blur(); }};
     const cleanup = () => { nameEl.removeEventListener('blur', onBlur); nameEl.removeEventListener('keydown', onKeyDown); };
     nameEl.addEventListener('blur', onBlur); nameEl.addEventListener('keydown', onKeyDown);
@@ -385,8 +332,7 @@ export function deleteTab(index: number) {
     if (index < 0 || index >= state.tabs.length) return;
     if (state.tabs.length === 1) {
         if (confirm('Isto irá limpar a última aba. Deseja continuar?')) {
-            const oldId = state.tabs[0].id;
-            state.tabs[0] = new TabState(oldId, `Aba ${oldId}`);
+            const oldId = state.tabs[0].id; state.tabs[0] = new TabState(oldId, `Aba ${oldId}`);
             switchTab(0, true);
         }
         return;
@@ -400,39 +346,35 @@ export function deleteTab(index: number) {
 
 export function switchTab(index: number, forceReload = false) {
     if (!forceReload && (index < 0 || index >= state.tabs.length || index === state.activeTabIndex)) return;
-    addToCumulativeResults(); // Autosave previous
+    addToCumulativeResults();
     state.activeTabIndex = index;
     const activeTab = getActiveTab();
     if (!activeTab) return;
-    state.drawnPath = []; state.currentMode = null; state.paintModeContext = null; state.backgroundColorToSubtract = null;
+    state.drawnPath = []; state.currentMode = null; state.paintModeContext = null;
     elements.allCanvases.forEach(c => c.getContext('2d')?.clearRect(0, 0, c.width, c.height));
-    if (activeTab.analyses.length > 0) loadImageByIndex(activeTab.currentAnalysisIndex);
-    else {
-        if (elements.initialMessage) elements.initialMessage.style.removeProperty('display');
-        if (elements.resultsContainer) elements.resultsContainer.classList.add('hidden');
-        if (elements.resetButton) elements.resetButton.disabled = true;
-        setSaveButtonState(true);
-        if (elements.imageNavControls) elements.imageNavControls.classList.add('hidden');
-        if (elements.mainImageNav) elements.mainImageNav.classList.add('hidden');
-        document.getElementById('zoom-controls')?.classList.add('hidden');
-        if (elements.fileNameDisplay) elements.fileNameDisplay.textContent = 'Nenhuma imagem carregada';
+    if (activeTab.analyses.length > 0) {
+        loadImageByIndex(activeTab.currentAnalysisIndex);
+    } else {
+        resetTabToEmpty(activeTab);
     }
     renderTabs();
     updateCumulativeResultsDisplay();
     renderStickers();
     updateUIMode();
+    updateAdjustmentUI();
+    const individualAdjustmentsBtn = document.getElementById('individual-adjustments-btn');
+    const downloadAnalyzedImageButton = document.getElementById('downloadAnalyzedImageButton');
+    const imageLoaded = activeTab.analyses.length > 0 && activeTab.currentAnalysisIndex !== -1;
+    if(individualAdjustmentsBtn) individualAdjustmentsBtn.classList.toggle('hidden', !imageLoaded);
+    if(downloadAnalyzedImageButton) downloadAnalyzedImageButton.classList.toggle('hidden', !imageLoaded);
 }
 
 export function renderStickers() {
     const activeTab = getActiveTab();
     if (!elements.stickerContainer || !elements.minimizedPanelsBar || !activeTab) return;
     
-    // Clear previous stickers from both containers
     elements.stickerContainer.innerHTML = '';
-    const minimizedStickerButtons = elements.minimizedPanelsBar.querySelectorAll('.minimized-sticker');
-    minimizedStickerButtons.forEach(btn => btn.remove());
-    
-    // Redraw minimized panels first to maintain order
+    elements.minimizedPanelsBar.querySelectorAll('.minimized-sticker').forEach(btn => btn.remove());
     renderMinimizedPanels();
 
     activeTab.stickers.forEach(s => {
@@ -440,79 +382,24 @@ export function renderStickers() {
             const el = document.createElement('button');
             el.className = 'minimized-sticker';
             el.dataset.stickerId = String(s.id);
-            el.style.backgroundColor = s.color;
-            el.style.setProperty('--sticker-color', s.color);
+            el.style.backgroundColor = s.color; el.style.setProperty('--sticker-color', s.color);
             el.title = s.title;
-            elements.minimizedPanelsBar.prepend(el); // Prepend to add from the right
+            elements.minimizedPanelsBar.prepend(el);
             return;
         }
         const el = document.createElement('div');
         el.className = 'sticker-panel';
         el.dataset.stickerId = String(s.id);
         Object.assign(el.style, { left: `${s.x}px`, top: `${s.y}px`, width: `${s.width}px`, height: `${s.height}px`, backgroundColor: s.color, color: s.fontColor, zIndex: String(s.zIndex), fontFamily: s.font });
-
-        const popover = `
-            <div class="sticker-settings-popover">
-                <div class="space-y-3">
-                    <div class="setting-row">
-                        <label>Fundo</label>
-                        <input type="color" class="sticker-bg-color-input" value="${s.color}">
-                    </div>
-                    <div class="setting-row">
-                        <label>Fonte</label>
-                        <input type="color" class="sticker-font-color-input" value="${s.fontColor}">
-                    </div>
-                     <div>
-                        <label>Tamanho Fonte</label>
-                        <input type="number" class="sticker-font-size-input bg-gray-700 w-full text-center border border-gray-600 rounded-md p-1 text-xs" min="8" max="48" value="${s.fontSize}">
-                    </div>
-                    <div>
-                        <label>Tipo de Fonte</label>
-                        <select class="sticker-font-select bg-gray-700 border border-gray-600 text-white text-xs rounded-lg block w-full p-1.5">
-                            <option value="'Inter', sans-serif" ${s.font === "'Inter', sans-serif" ? 'selected' : ''}>Inter</option>
-                            <option value="'Roboto Slab', serif" ${s.font === "'Roboto Slab', serif" ? 'selected' : ''}>Roboto Slab</option>
-                            <option value="'Lato', sans-serif" ${s.font === "'Lato', sans-serif" ? 'selected' : ''}>Lato</option>
-                            <option value="Arial, sans-serif" ${s.font === "Arial, sans-serif" ? 'selected' : ''}>Arial</option>
-                            <option value="'Times New Roman', serif" ${s.font === "'Times New Roman', serif" ? 'selected' : ''}>Times New Roman</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        el.innerHTML = `
-            <div class="sticker-header">
-                <input type="text" class="sticker-title-input" value="${s.title}">
-                <div class="sticker-controls">
-                    <button class="sticker-settings-btn" title="Configurações">
-                        <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311a1.464 1.464 0 0 1-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0 2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/></svg>
-                    </button>
-                    ${popover}
-                    <button class="sticker-minimize-btn" title="Minimizar">
-                        <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M2 8a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11A.5.5 0 0 1 2 8z"/></svg>
-                    </button>
-                    <button class="sticker-close-btn" title="Fechar">
-                        <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg>
-                    </button>
-                </div>
-            </div>
-            <div class="sticker-content">
-                <textarea class="sticker-textarea ${s.placeholderActive ? 'placeholder-active' : ''}" style="font-size:${s.fontSize}px;">${s.placeholderActive ? 'Nova nota...' : s.content}</textarea>
-            </div>
-            <div class="resize-handle"></div>
-        `;
+        const popover = `<div class="sticker-settings-popover"><div class="space-y-3"><div class="setting-row"><label>Fundo</label><input type="color" class="sticker-bg-color-input" value="${s.color}"></div><div class="setting-row"><label>Fonte</label><input type="color" class="sticker-font-color-input" value="${s.fontColor}"></div><div><label>Tamanho Fonte</label><input type="number" class="sticker-font-size-input bg-gray-700 w-full text-center border border-gray-600 rounded-md p-1 text-xs" min="8" max="48" value="${s.fontSize}"></div><div><label>Tipo de Fonte</label><select class="sticker-font-select bg-gray-700 border border-gray-600 text-white text-xs rounded-lg block w-full p-1.5"><option value="'Inter', sans-serif" ${s.font === "'Inter', sans-serif" ? 'selected' : ''}>Inter</option><option value="'Roboto Slab', serif" ${s.font === "'Roboto Slab', serif" ? 'selected' : ''}>Roboto Slab</option><option value="'Lato', sans-serif" ${s.font === "'Lato', sans-serif" ? 'selected' : ''}>Lato</option><option value="Arial, sans-serif" ${s.font === "Arial, sans-serif" ? 'selected' : ''}>Arial</option><option value="'Times New Roman', serif" ${s.font === "'Times New Roman', serif" ? 'selected' : ''}>Times New Roman</option></select></div></div></div>`;
+        el.innerHTML = `<div class="sticker-header"><input type="text" class="sticker-title-input" value="${s.title}"><div class="sticker-controls"><button class="sticker-settings-btn" title="Configurações"><svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311a1.464 1.464 0 0 1-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705-1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413-1.4-2.397 0 2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/></svg></button>${popover}<button class="sticker-minimize-btn" title="Minimizar"><svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M2 8a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11A.5.5 0 0 1 2 8z"/></svg></button><button class="sticker-close-btn" title="Fechar"><svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg></button></div></div><div class="sticker-content"><textarea class="sticker-textarea ${s.placeholderActive ? 'placeholder-active' : ''}" style="font-size:${s.fontSize}px;">${s.placeholderActive ? 'Nova nota...' : s.content}</textarea></div><div class="resize-handle"></div>`;
         elements.stickerContainer?.appendChild(el);
     });
 }
 
-
-/**
- * Renders the cumulative results data from the active tab into an HTML table.
- */
 export function updateCumulativeResultsDisplay() {
     const activeTab = getActiveTab();
     if (!elements.cumulativeResultTableContainer || !activeTab) return;
-
     const hasResults = activeTab.cumulativeResults.length > 0;
     if(elements.copyCumulativeCsvButton) elements.copyCumulativeCsvButton.disabled = !hasResults;
     if(elements.saveCumulativeCsvButton) elements.saveCumulativeCsvButton.disabled = !hasResults;
@@ -524,48 +411,9 @@ export function updateCumulativeResultsDisplay() {
         return;
     }
 
-    let tableHtml = `<table class="w-full text-left text-xs text-gray-300">
-        <thead class="bg-gray-700/50 uppercase text-gray-400 sticky top-0 backdrop-blur-sm"><tr>
-            <th class="px-2 py-1">Arquivo</th><th class="px-2 py-1 text-right">Raio Núcleo (µm)</th>
-            <th class="px-2 py-1 text-right">Mig. Halo (µm)</th><th class="px-2 py-1 text-right">Mig. Máx. (µm)</th>
-            <th class="px-2 py-1 text-right">Células</th><th class="px-2 py-1 text-right">Área Mig. (µm²)</th>
-            <th class="px-2 py-1 text-right">Diâmetro Máx. (µm)</th><th class="px-2 py-1 text-right">Circularidade</th>
-            <th class="px-2 py-1 text-right">Esfericidade</th><th class="px-2 py-1 text-right">Compacidade</th>
-            <th class="px-2 py-1 text-right">Solidez</th><th class="px-2 py-1 text-right">Convexidade</th>
-            <th class="px-2 py-1 text-right">Entropia</th>
-            <th class="px-2 py-1 text-right">Skewness</th>
-            <th class="px-2 py-1 text-right">Kurtosis</th>
-            <th class="px-2 py-1 text-right">Média (GL)</th>
-            <th class="px-2 py-1 text-right">Variância (GL)</th>
-            <th class="px-2 py-1 text-right">Grad. Médio</th>
-            <th class="px-2 py-1 text-right">Var. Gradiente</th>
-            <th class="px-2 py-1 text-center">Ações</th>
-        </tr></thead><tbody>`;
-    
+    let tableHtml = `<table class="w-full text-left text-xs text-gray-300"><thead class="bg-gray-700/50 uppercase text-gray-400 sticky top-0 backdrop-blur-sm"><tr><th class="px-2 py-1">Arquivo</th><th class="px-2 py-1 text-right">Raio Núcleo (µm)</th><th class="px-2 py-1 text-right">Mig. Halo (µm)</th><th class="px-2 py-1 text-right">Mig. Máx. (µm)</th><th class="px-2 py-1 text-right">Células</th><th class="px-2 py-1 text-right">Área Mig. (µm²)</th><th class="px-2 py-1 text-right">Diâmetro Máx. (µm)</th><th class="px-2 py-1 text-right">Circularidade</th><th class="px-2 py-1 text-right">Esfericidade</th><th class="px-2 py-1 text-right">Compacidade</th><th class="px-2 py-1 text-right">Solidez</th><th class="px-2 py-1 text-right">Convexidade</th><th class="px-2 py-1 text-right">Entropia</th><th class="px-2 py-1 text-right">Skewness</th><th class="px-2 py-1 text-right">Kurtosis</th><th class="px-2 py-1 text-right">Média (GL)</th><th class="px-2 py-1 text-right">Variância (GL)</th><th class="px-2 py-1 text-right">Grad. Médio</th><th class="px-2 py-1 text-right">Var. Gradiente</th><th class="px-2 py-1 text-center">Ações</th></tr></thead><tbody>`;
     activeTab.cumulativeResults.forEach((res, index) => {
-        tableHtml += `
-            <tr class="border-b border-gray-700/50 hover:bg-gray-800/50">
-                <td class="px-2 py-1 font-medium truncate" title="${res.filename}">${res.filename}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.coreRadius_um}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.haloMigration_um}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.maxMigration_um}</td>
-                <td class="px-2 py-1 text-right font-mono">${new Intl.NumberFormat('pt-BR').format(res.cellCount)}</td>
-                <td class="px-2 py-1 text-right font-mono">${new Intl.NumberFormat('pt-BR').format(Number(res.migrationArea_um2))}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.maxDiameter_um}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.circularity}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.sphericity}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.compactness}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.solidity}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.convexity}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.entropy}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.skewness}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.kurtosis}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.mean}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.variance}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.meanGradient}</td>
-                <td class="px-2 py-1 text-right font-mono">${res.varianceGradient}</td>
-                <td class="px-2 py-1 text-center"><button class="delete-cumulative-btn p-1 rounded-md hover:bg-red-500/20" data-index="${index}" title="Deletar"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="text-red-400" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button></td>
-            </tr>`;
+        tableHtml += `<tr class="border-b border-gray-700/50 hover:bg-gray-800/50"><td class="px-2 py-1 font-medium truncate" title="${res.filename}">${res.filename}</td><td class="px-2 py-1 text-right font-mono">${res.coreRadius_um}</td><td class="px-2 py-1 text-right font-mono">${res.haloMigration_um}</td><td class="px-2 py-1 text-right font-mono">${res.maxMigration_um}</td><td class="px-2 py-1 text-right font-mono">${new Intl.NumberFormat('pt-BR').format(res.cellCount)}</td><td class="px-2 py-1 text-right font-mono">${new Intl.NumberFormat('pt-BR').format(Number(res.migrationArea_um2))}</td><td class="px-2 py-1 text-right font-mono">${res.maxDiameter_um}</td><td class="px-2 py-1 text-right font-mono">${res.circularity}</td><td class="px-2 py-1 text-right font-mono">${res.sphericity}</td><td class="px-2 py-1 text-right font-mono">${res.compactness}</td><td class="px-2 py-1 text-right font-mono">${res.solidity}</td><td class="px-2 py-1 text-right font-mono">${res.convexity}</td><td class="px-2 py-1 text-right font-mono">${res.entropy}</td><td class="px-2 py-1 text-right font-mono">${res.skewness}</td><td class="px-2 py-1 text-right font-mono">${res.kurtosis}</td><td class="px-2 py-1 text-right font-mono">${res.mean}</td><td class="px-2 py-1 text-right font-mono">${res.variance}</td><td class="px-2 py-1 text-right font-mono">${res.meanGradient}</td><td class="px-2 py-1 text-right font-mono">${res.varianceGradient}</td><td class="px-2 py-1 text-center"><button class="delete-cumulative-btn p-1 rounded-md hover:bg-red-500/20" data-index="${index}" title="Deletar"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="text-red-400" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button></td></tr>`;
     });
     tableHtml += '</tbody></table>';
     elements.cumulativeResultTableContainer.innerHTML = tableHtml;

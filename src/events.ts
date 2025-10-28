@@ -1,8 +1,8 @@
 import * as elements from './elements';
-import { state, getActiveTab, getActiveAnalysis, StickerState } from './state';
+import { handleFiles, loadImageByIndex, resetImageAdjustments, deleteCurrentImage, applyImageFilters } from './image';
+import { state, getActiveTab, getActiveAnalysis, StickerState, defaultAdjustments, getEffectiveAdjustments, AdjustmentState } from './state';
 import { requestRedraw, resetView, zoomTo, getMousePos, paintOnCanvas } from './canvas';
-import { applyImageFilters, handleFiles, loadImageByIndex, resetImageAdjustments, deleteCurrentImage } from './image';
-import { setMode, updateUIMode, initializePanels, syncCheckboxes, completeStepAndAdvance, switchTab, addNewTab, deleteTab, renderTabs, updateFullscreenButton, renameTab, renderStickers, updateCellCounters, goToWorkflowStep, minimizePanel, restorePanel, makeDraggable, renderMinimizedPanels } from './ui';
+import { setMode, updateUIMode, initializePanels, completeStepAndAdvance, switchTab, addNewTab, deleteTab, renderTabs, updateFullscreenButton, renameTab, renderStickers, updateCellCounters, goToWorkflowStep, minimizePanel, restorePanel, makeDraggable, renderMinimizedPanels, updateBrushToolsUI, updateAdjustmentUI } from './ui';
 import { analyzeSpheroid, refineContour, runMagicWand, processPaintedSpheroid, processPaintedMargin, pushToHistory, handleSpheroidEdit } from './analysis';
 import { addToCumulativeResults, clearCumulativeResults, copyCumulativeCsv, saveCumulativeCsv, openInSheets, deleteCumulativeResult, saveProject, loadProject, updateResultsDisplay, calculateAndStoreMigrationMetrics } from './results';
 import { handleGlobalKeyDown } from './shortcuts';
@@ -13,12 +13,6 @@ const requestFilterAndRedraw = debounce(() => {
     if(analysis) applyImageFilters(analysis); 
 }, 250);
 
-function updateBrushToolsUI() {
-    if (!elements.brushToolPaint || !elements.brushToolErase) return;
-    elements.brushToolPaint.classList.toggle('active', !state.isErasing);
-    elements.brushToolErase.classList.toggle('active', state.isErasing);
-}
-
 let tempProjectFileForLoad: File | null = null;
 let tempProjectDataForLoad: any = null;
 
@@ -26,6 +20,7 @@ let tempProjectDataForLoad: any = null;
  * Initializes all event listeners for the application.
  */
 export function initializeEventListeners() {
+    let dragEnterCounter = 0;
 
     // File and Project Handling
     elements.imageLoader?.addEventListener('change', (e) => {
@@ -46,7 +41,11 @@ export function initializeEventListeners() {
             state.nextTabId = 0;
             state.nextStickerId = 0;
             state.minimizedPanels = [];
-    
+            state.zoom = 1;
+            state.pan = { x: 0, y: 0 };
+            state.adjustmentScope = 'tab';
+            state.globalAdjustments = { ...defaultAdjustments };
+
             // 2. Reset UI
             // Close all floating panels and deactivate header buttons
             elements.allPopupPanels.forEach(panel => {
@@ -56,13 +55,18 @@ export function initializeEventListeners() {
                 btn.classList.remove('active');
             });
             
-            // Reset project name to the default from the HTML
+            // Reset project name to the default
             const defaultProjectName = 'Analisador de Migração';
             if (elements.headerProjectNameInput) elements.headerProjectNameInput.value = defaultProjectName;
-    
+            
+            // Reset image adjustments and profile selection
+            resetImageAdjustments();
+            if (elements.profileSelect) elements.profileSelect.value = '__default__';
+
             // 3. Add a fresh new tab. This will call switchTab and reset the main view.
             addNewTab();
             renderMinimizedPanels(); // Clear the minimized bar
+            requestRedraw(); // Request a redraw to apply zoom/pan reset visually
         }
     });
 
@@ -196,40 +200,82 @@ export function initializeEventListeners() {
         if(activeTab) activeTab.name = elements.headerProjectNameInput.value;
     });
 
-    elements.saveAnalyzedButton?.addEventListener('click', () => {
-        const analysis = getActiveAnalysis();
-        if (!analysis || !analysis.originalImage) return;
-        const saveCanvas = document.createElement('canvas');
-        saveCanvas.width = analysis.originalImage.width;
-        saveCanvas.height = analysis.originalImage.height;
-        const ctx = saveCanvas.getContext('2d');
-        if (!ctx) return;
-        import('./canvas').then(({ drawForSaving }) => {
-            drawForSaving(ctx);
-            const imageData = ctx.getImageData(0, 0, saveCanvas.width, saveCanvas.height);
-            const tiffBuffer = (window as any).UTIF.encodeImage(imageData.data.buffer, imageData.width, imageData.height);
-            const blob = new Blob([tiffBuffer], { type: 'image/tiff' });
-            
-            const link = document.createElement('a');
-            const baseName = analysis.originalFilename.split('.').slice(0, -1).join('.') || 'imagem';
-            link.download = `${baseName}_Analise_Migracao.tif`;
-            link.href = URL.createObjectURL(blob);
-            link.click();
-            URL.revokeObjectURL(link.href);
-        });
-    });
+    // --- Image Adjustment Listeners (Refactored for clarity and robustness) ---
+    const handleAdjustmentInput = (key: keyof AdjustmentState) => (e: Event) => {
+        const value = parseInt((e.target as HTMLInputElement).value, 10);
+        const adjustments = getEffectiveAdjustments();
+        if (adjustments) {
+            (adjustments as any)[key] = value;
+            requestFilterAndRedraw();
+        }
+    };
+    const handleAdjustmentCheckbox = (key: keyof AdjustmentState) => (e: Event) => {
+        const value = (e.target as HTMLInputElement).checked;
+        const adjustments = getEffectiveAdjustments();
+        if (adjustments) {
+            (adjustments as any)[key] = value;
+            requestFilterAndRedraw();
+        }
+    };
 
-    // Image Adjustment Listeners
-    [elements.contrastInput, elements.sharpnessInput, elements.brightnessInput, elements.highlightsInput, elements.shadowsInput, elements.whitesInput, elements.blacksInput, elements.invertCheckbox, elements.binarizeCheckbox, elements.backgroundToleranceInput, elements.binaryThresholdInput].forEach(el => {
-        if (el) el.addEventListener('input', requestFilterAndRedraw);
-    });
+    elements.contrastInput?.addEventListener('input', handleAdjustmentInput('contrast'));
+    elements.sharpnessInput?.addEventListener('input', handleAdjustmentInput('sharpness'));
+    elements.brightnessInput?.addEventListener('input', handleAdjustmentInput('brightness'));
+    elements.highlightsInput?.addEventListener('input', handleAdjustmentInput('highlights'));
+    elements.shadowsInput?.addEventListener('input', handleAdjustmentInput('shadows'));
+    elements.whitesInput?.addEventListener('input', handleAdjustmentInput('whites'));
+    elements.blacksInput?.addEventListener('input', handleAdjustmentInput('blacks'));
+    elements.backgroundToleranceInput?.addEventListener('input', handleAdjustmentInput('backgroundTolerance'));
+    elements.binaryThresholdInput?.addEventListener('input', handleAdjustmentInput('binaryThreshold'));
+
+    elements.contrastNumber?.addEventListener('change', handleAdjustmentInput('contrast'));
+    elements.sharpnessNumber?.addEventListener('change', handleAdjustmentInput('sharpness'));
+    elements.brightnessNumber?.addEventListener('change', handleAdjustmentInput('brightness'));
+    elements.highlightsNumber?.addEventListener('change', handleAdjustmentInput('highlights'));
+    elements.shadowsNumber?.addEventListener('change', handleAdjustmentInput('shadows'));
+    elements.whitesNumber?.addEventListener('change', handleAdjustmentInput('whites'));
+    elements.blacksNumber?.addEventListener('change', handleAdjustmentInput('blacks'));
+    elements.backgroundToleranceNumber?.addEventListener('change', handleAdjustmentInput('backgroundTolerance'));
+    elements.binaryThresholdNumber?.addEventListener('change', handleAdjustmentInput('binaryThreshold'));
+
+    elements.invertCheckbox?.addEventListener('change', handleAdjustmentCheckbox('invert'));
+    elements.binarizeCheckbox?.addEventListener('change', handleAdjustmentCheckbox('binarize'));
+
+
+    // Adjustment Scope Toggle (Fixed)
+    const onScopeChange = (scope: 'image' | 'tab' | 'global') => {
+        const analysis = getActiveAnalysis();
+        if (!analysis) return;
     
+        if (scope === 'image') {
+            if (!analysis.adjustments) {
+                analysis.adjustments = { ...getEffectiveAdjustments() };
+            }
+        } else {
+            analysis.adjustments = null;
+            state.adjustmentScope = scope;
+        }
+        
+        updateAdjustmentUI();
+        applyImageFilters(analysis);
+    };
+
+    const imageRadio = document.getElementById('adjustment-mode-image') as HTMLInputElement;
+    const tabRadio = document.getElementById('adjustment-mode-tab') as HTMLInputElement;
+    const globalRadio = document.getElementById('adjustment-mode-global') as HTMLInputElement;
+    
+    imageRadio?.addEventListener('change', () => { if (imageRadio.checked) onScopeChange('image'); });
+    tabRadio?.addEventListener('change', () => { if (tabRadio.checked) onScopeChange('tab'); });
+    globalRadio?.addEventListener('change', () => { if (globalRadio.checked) onScopeChange('global'); });
+
+
+    // Sync for slider and number fields
     const syncSliderAndNumber = (sliderId: string, numberId: string) => {
         const slider = document.getElementById(sliderId) as HTMLInputElement;
         const number = document.getElementById(numberId) as HTMLInputElement;
         if (slider && number) {
-            slider.addEventListener('input', () => { number.value = slider.value; requestFilterAndRedraw(); });
-            number.addEventListener('change', () => { slider.value = number.value; requestFilterAndRedraw(); });
+            slider.addEventListener('input', () => { number.value = slider.value; });
+            number.addEventListener('change', () => { slider.value = number.value; });
         }
     };
     syncSliderAndNumber('brightnessInput', 'brightnessNumber');
@@ -243,7 +289,7 @@ export function initializeEventListeners() {
     syncSliderAndNumber('binaryThresholdInput', 'binaryThresholdNumber');
     syncSliderAndNumber('magicWandToleranceInput', 'magicWandToleranceNumber');
     syncSliderAndNumber('aiToleranceInput', 'aiToleranceNumber');
-
+    
     // Sync for brush controls which doesn't need a filter redraw
     elements.brushSizeInput?.addEventListener('input', () => {
         if (elements.brushSizeNumber) elements.brushSizeNumber.value = elements.brushSizeInput.value;
@@ -258,7 +304,7 @@ export function initializeEventListeners() {
         requestRedraw();
     });
     elements.brushOpacityNumber?.addEventListener('change', () => {
-        if (elements.brushOpacityInput) elements.brushOpacityInput.value = elements.brushOpacityNumber.value;
+        if (elements.brushOpacityInput) elements.brushOpacityInput.value = elements.brushOpacityInput.value;
         requestRedraw();
     });
     
@@ -281,20 +327,6 @@ export function initializeEventListeners() {
         });
     });
     
-    elements.convertTo8BitButton?.addEventListener('click', () => {
-        const analysis = getActiveAnalysis();
-        if (!analysis || !analysis.originalImage) return;
-        analysis.is8Bit = true;
-        applyImageFilters(analysis);
-        if (elements.bitStatus) {
-            elements.bitStatus.textContent = '8-bit';
-            elements.bitStatus.className = 'text-xs font-bold ml-auto px-2 py-0.5 rounded-full bg-teal-500/80 text-white';
-        }
-        (elements.convertTo8BitButton as HTMLButtonElement).disabled = true;
-        [elements.paintSpheroidButton, elements.drawSpheroidButton, elements.magicPaintButton, elements.undoPointButton].forEach(b => { if (b) (b as HTMLButtonElement).disabled = false });
-        completeStepAndAdvance();
-    });
-
     [elements.drawSpheroidButton, elements.magicPaintButton, elements.drawMarginButton, elements.setHaloPointButton, elements.setMigrationPointButton].forEach(btn => {
         if (btn) btn.addEventListener('click', () => setMode((btn as HTMLElement).dataset.mode));
     });
@@ -374,6 +406,23 @@ export function initializeEventListeners() {
         pushToHistory();
     });
 
+    elements.deleteHaloPointButton?.addEventListener('click', () => {
+        const analysis = getActiveAnalysis();
+        if (!analysis) return;
+        analysis.haloRadiusData = null;
+        calculateAndStoreMigrationMetrics();
+        pushToHistory();
+    });
+
+    elements.deleteMigrationPointButton?.addEventListener('click', () => {
+        const analysis = getActiveAnalysis();
+        if (!analysis || !analysis.lastAnalysisResult) return;
+        delete analysis.lastAnalysisResult.maxRadiusData;
+        delete analysis.lastAnalysisResult.maxRadius;
+        calculateAndStoreMigrationMetrics();
+        pushToHistory();
+    });
+
     elements.addCellButton?.addEventListener('click', () => setMode('addCell'));
     elements.removeCellButton?.addEventListener('click', () => setMode('removeCell'));
     elements.clearCellsButton?.addEventListener('click', () => {
@@ -402,7 +451,7 @@ export function initializeEventListeners() {
     
         addToCumulativeResults(); // This saves the results
         analysis.isCompleted = true;
-        analysis.currentAnalysisStep = 4; // Ensure it's marked as on the last step
+        analysis.currentAnalysisStep = 3; // Ensure it's marked as on the last step
     
         showToast('Análise concluída e registrada!');
         
@@ -413,7 +462,7 @@ export function initializeEventListeners() {
         }
         
         // Refresh the UI to reflect the "completed" state without activating tools
-        goToWorkflowStep(4);
+        goToWorkflowStep(3);
     });
 
     if (elements.resultCanvas) {
@@ -515,10 +564,12 @@ export function initializeEventListeners() {
             switch (state.currentMode) {
                 case 'magicPaint': runMagicWand(pos); break;
                 case 'selectBackground': {
+                    const adjustments = getEffectiveAdjustments();
                     const originalCtx = elements.originalCanvas.getContext('2d', { willReadFrequently: true });
                     if (!originalCtx) return;
                     const p = originalCtx.getImageData(Math.round(pos.x), Math.round(pos.y), 1, 1).data;
-                    state.backgroundColorToSubtract = { r: p[0], g: p[1], b: p[2] };
+                    adjustments.backgroundColorToSubtract = { r: p[0], g: p[1], b: p[2] };
+                    
                     const bgPreview = document.getElementById('backgroundColorPreview') as HTMLElement;
                     if(bgPreview) bgPreview.style.backgroundColor = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
                     applyImageFilters(analysis);
@@ -557,7 +608,7 @@ export function initializeEventListeners() {
                     analysis.lastAnalysisResult = { ...analysis.lastAnalysisResult, maxRadius, maxRadiusData: { point: pos, angle: Math.atan2(pos.y - centerY, pos.x - centerX) } };
                     calculateAndStoreMigrationMetrics();
                     setMode(null);
-                    if (analysis.currentAnalysisStep === 2) {
+                    if (analysis.currentAnalysisStep === 1) {
                         if (confirm('Concluir a definição de raios e iniciar a contagem de células?')) {
                             completeStepAndAdvance();
                             setMode('addCell');
@@ -650,6 +701,51 @@ export function initializeEventListeners() {
         updateFullscreenButton(isFullscreen);
         resetView();
     });
+
+    // New floating button listeners
+    const individualAdjustmentsBtn = document.getElementById('individual-adjustments-btn');
+    if (individualAdjustmentsBtn) {
+        individualAdjustmentsBtn.addEventListener('click', () => {
+            if (elements.adjustmentsPanel) {
+                elements.adjustmentsPanel.classList.remove('hidden');
+                document.getElementById('header-adjustments-btn')?.classList.add('active');
+            }
+            const imageScopeInput = document.getElementById('adjustment-mode-image') as HTMLInputElement;
+            if (imageScopeInput) {
+                imageScopeInput.checked = true;
+                // Manually dispatch change event to trigger the logic
+                imageScopeInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
+    }
+
+    const downloadAnalyzedImageButton = document.getElementById('downloadAnalyzedImageButton');
+    if (downloadAnalyzedImageButton) {
+        downloadAnalyzedImageButton.addEventListener('click', () => {
+            const analysis = getActiveAnalysis();
+            if (!analysis || !analysis.originalImage) {
+                showToast("Nenhuma imagem para baixar.", 3000);
+                return;
+            }
+            
+            const saveCanvas = document.createElement('canvas');
+            saveCanvas.width = analysis.originalImage.width;
+            saveCanvas.height = analysis.originalImage.height;
+            const ctx = saveCanvas.getContext('2d');
+            if (!ctx) return;
+
+            import('./canvas').then(({ drawForSaving }) => {
+                drawForSaving(ctx);
+                
+                const link = document.createElement('a');
+                const baseName = analysis.originalFilename.split('.').slice(0, -1).join('.') || 'imagem';
+                link.download = `${baseName}_analisada.png`;
+                link.href = saveCanvas.toDataURL('image/png');
+                link.click();
+            });
+        });
+    }
+
 
     elements.brushToolPaint?.addEventListener('click', () => { state.isErasing = false; updateBrushToolsUI(); });
     elements.brushToolErase?.addEventListener('click', () => { state.isErasing = true; updateBrushToolsUI(); });
@@ -744,26 +840,78 @@ export function initializeEventListeners() {
             }
         }
     });
-
+    
     if (elements.mainContainer && elements.dragDropOverlay) {
-        let enterCounter = 0;
-        elements.mainContainer.addEventListener('dragenter', (e) => { e.preventDefault(); e.stopPropagation(); enterCounter++; if (enterCounter === 1) elements.dragDropOverlay!.classList.remove('hidden'); });
-        elements.dragDropOverlay.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); enterCounter--; if (enterCounter === 0) elements.dragDropOverlay!.classList.add('hidden'); });
-        elements.dragDropOverlay.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); });
+        elements.mainContainer.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!elements.tabSelectionModal?.classList.contains('hidden')) return;
+    
+            dragEnterCounter++;
+            if (dragEnterCounter === 1) {
+                elements.dragDropOverlay!.classList.remove('hidden');
+                elements.mainContainer!.classList.add('dragging');
+            }
+        });
+    
+        elements.dragDropOverlay.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragEnterCounter--;
+            if (dragEnterCounter === 0) {
+                elements.dragDropOverlay!.classList.add('hidden');
+                elements.mainContainer!.classList.remove('dragging');
+                if(elements.dropOptions) elements.dropOptions.classList.add('hidden');
+            }
+        });
+    
+        elements.dragDropOverlay.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+    
         elements.dragDropOverlay.addEventListener('drop', (e) => {
-            e.preventDefault(); e.stopPropagation(); enterCounter = 0; elements.dragDropOverlay!.classList.add('hidden');
+            e.preventDefault();
+            e.stopPropagation();
+            dragEnterCounter = 0;
+            elements.mainContainer!.classList.remove('dragging');
+            
             const files = e.dataTransfer?.files;
             if (files && files.length > 0) {
                 const activeTab = getActiveTab();
                 if (activeTab && activeTab.analyses.length > 0) {
                     state.tempDroppedFiles = Array.from(files);
-                    if(elements.dropOptions) elements.dropOptions.classList.remove('hidden');
-                } else handleFiles(Array.from(files), 'replace');
+                    if (elements.dropOptions) {
+                        elements.dropOptions.classList.remove('hidden');
+                    }
+                } else {
+                    handleFiles(Array.from(files), 'replace');
+                    elements.dragDropOverlay!.classList.add('hidden');
+                }
+            } else {
+                elements.dragDropOverlay!.classList.add('hidden');
             }
         });
-        elements.dropReplaceBtn?.addEventListener('click', () => { if (state.tempDroppedFiles.length > 0) handleFiles(state.tempDroppedFiles, 'replace'); if(elements.dropOptions) elements.dropOptions.classList.add('hidden'); state.tempDroppedFiles = []; });
-        elements.dropAddBtn?.addEventListener('click', () => { if (state.tempDroppedFiles.length > 0) handleFiles(state.tempDroppedFiles, 'add'); if(elements.dropOptions) elements.dropOptions.classList.add('hidden'); state.tempDroppedFiles = []; });
-        elements.dropCancelBtn?.addEventListener('click', () => { if(elements.dropOptions) elements.dropOptions.classList.add('hidden'); state.tempDroppedFiles = []; });
+        
+        const hideDropOverlay = () => {
+            if (elements.dropOptions) elements.dropOptions.classList.add('hidden');
+            if (elements.dragDropOverlay) {
+                elements.dragDropOverlay.classList.add('hidden');
+            }
+            state.tempDroppedFiles = [];
+        }
+    
+        elements.dropReplaceBtn?.addEventListener('click', () => {
+            if (state.tempDroppedFiles.length > 0) handleFiles(state.tempDroppedFiles, 'replace');
+            hideDropOverlay();
+        });
+        elements.dropAddBtn?.addEventListener('click', () => {
+            if (state.tempDroppedFiles.length > 0) handleFiles(state.tempDroppedFiles, 'add');
+            hideDropOverlay();
+        });
+        elements.dropCancelBtn?.addEventListener('click', () => {
+            hideDropOverlay();
+        });
     }
 
     const tabsContainer = document.getElementById('tabs-container');
@@ -985,7 +1133,7 @@ export function initializeEventListeners() {
             }
 
             const coreStepComplete = analysis.manualDrawnPath.length > 0;
-            const isUnlocked = stepIndex <= 1 || coreStepComplete;
+            const isUnlocked = stepIndex === 0 || coreStepComplete;
             if (stepIndex !== -1 && isUnlocked) goToWorkflowStep(stepIndex);
         }
     });

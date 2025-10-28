@@ -358,6 +358,20 @@ main.dragging {
     background-color: #1f2937; /* gray-800 */
 }
 
+/* Adjustments Panel Style */
+/* Hide the actual radio button, but keep it accessible */
+.adjustment-scope-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+/* Style the label for the checked radio button using the adjacent sibling selector */
+.adjustment-scope-input:checked + .adjustment-scope-label {
+    background-color: #2dd4bf;
+    color: #111827;
+}
+
 /* Help Panel Styles */
 #help-panel .panel-content {
     padding: 0.75rem;

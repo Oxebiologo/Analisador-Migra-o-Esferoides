@@ -363,8 +363,8 @@ export function calculateMorphologicalMetrics(path: {x: number, y: number}[], ca
         // Mean (GL_mean)
         mean = pixelValues.reduce((sum, val) => sum + val, 0) / n;
         
-        // Variance and Standard Deviation (V)
-        variance = pixelValues.reduce((sum, val) => sum + (val - mean)**2, 0) / n;
+        // Sample Variance and Standard Deviation
+        variance = n > 1 ? pixelValues.reduce((sum, val) => sum + (val - mean)**2, 0) / (n - 1) : 0;
         const stdDev = Math.sqrt(variance);
 
         // Entropy
@@ -373,16 +373,20 @@ export function calculateMorphologicalMetrics(path: {x: number, y: number}[], ca
         entropy = histogram.reduce((ent, count) => {
             if (count > 0) {
                 const probability = count / n;
+                // Standard Shannon Entropy formula: -Σ(p * log2(p)). This ensures a non-negative result.
                 ent -= probability * Math.log2(probability);
             }
             return ent;
         }, 0);
 
-        // Skewness & Kurtosis (revised for robustness)
+        // Skewness & Kurtosis
         const epsilon = 1e-6; // To avoid division by zero on uniform images
         if (stdDev > epsilon) {
+            // Moments are calculated with population size 'n'
             const m3 = pixelValues.reduce((sum, val) => sum + (val - mean)**3, 0) / n;
             const m4 = pixelValues.reduce((sum, val) => sum + (val - mean)**4, 0) / n;
+            // Skewness and Kurtosis are normalized by sample standard deviation 'stdDev' (s)
+            // This aligns with common statistical software packages like MATLAB
             skewness = m3 / (stdDev**3);
             kurtosis = m4 / (stdDev**4);
         }

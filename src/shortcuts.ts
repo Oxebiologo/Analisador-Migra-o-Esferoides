@@ -1,257 +1,252 @@
-import { state, getActiveAnalysis } from './state';
+import { state, getActiveAnalysis, getActiveTab } from './state';
 import * as elements from './elements';
 import { undo, redo } from './analysis';
-import { showToast } from './utils';
+import { switchTab, addNewTab, deleteTab, updateBrushToolsUI, setMode } from './ui';
+import { deleteCurrentImage, resetImageAdjustments } from './image';
+import { zoomTo, resetView } from './canvas';
 
 const SHORTCUT_STORAGE_KEY = 'spheroidAnalyzerShortcuts';
 
-const defaultShortcuts = {
-    loadImage: 'o',
-    saveAnalysis: 's',
-    resetAll: 'r',
-    nextImage: 'ArrowRight',
-    prevImage: 'ArrowLeft',
-    toggleFullscreen: 'f',
-    zoomIn: '+',
-    zoomOut: '-',
-    zoomReset: '0',
-    paintSpheroid: 'p',
-    drawSpheroid: 'd',
-    magicPaint: 'g',
-    drawMargin: 'b',
-    undoContour: 'u',
-    setHalo: 'h',
-    setMigration: 'm',
-    nextStep: ' ',
-    prevStep: 'Backspace',
-    toggleAdjustments: 'a',
-    toggleCumulative: 't',
-    goToStep1: '1',
-    goToStep2: '2',
-    goToStep3: '3',
-    goToStep4: '4',
-    goToStep5: '5',
-    undoAction: 'Control+z',
-    redoAction: 'Control+y',
-    confirmOrAdvance: 'Enter',
+const defaultShortcuts: { [key: string]: { default: string, name: string } } = {
+    newProject: { default: 'Control+Alt+N', name: 'Novo Projeto' },
+    loadProject: { default: 'Control+Alt+O', name: 'Carregar Projeto' },
+    loadImage: { default: 'Control+O', name: 'Carregar Imagens' },
+    saveProject: { default: 'Control+S', name: 'Salvar Projeto' },
+    deleteImage: { default: 'Delete', name: 'Deletar Imagem Atual' },
+    undo: { default: 'Control+Z', name: 'Desfazer' },
+    redo: { default: 'Control+Y', name: 'Refazer' },
+    nextImage: { default: 'ArrowRight', name: 'Próxima Imagem' },
+    prevImage: { default: 'ArrowLeft', name: 'Imagem Anterior' },
+    newTab: { default: 'Control+Alt+T', name: 'Nova Aba' },
+    closeTab: { default: 'Control+Alt+W', name: 'Fechar Aba' },
+    nextTab: { default: 'Control+Tab', name: 'Próxima Aba' },
+    prevTab: { default: 'Control+Shift+Tab', name: 'Aba Anterior' },
+    zoomIn: { default: '+', name: 'Aumentar Zoom' },
+    zoomOut: { default: '-', name: 'Diminuir Zoom' },
+    resetView: { default: '0', name: 'Resetar Zoom' },
+    toggleFullscreen: { default: 'F', name: 'Tela Cheia' },
+    confirmOrAdvance: { default: 'Enter', name: 'Avançar/Confirmar Etapa' },
+    goBack: { default: 'Backspace', name: 'Voltar Etapa' },
+    clearContour: { default: 'U', name: 'Limpar Contorno/Pintura' },
+    setSpheroidContour: { default: 'D', name: 'Desenhar Contorno do Núcleo' },
+    editSpheroid: { default: 'P', name: 'Editar/Pintar Núcleo' },
+    magicWand: { default: 'G', name: 'Seleção Mágica (Núcleo)' },
+    setHaloPoint: { default: 'H', name: 'Definir Raio do Halo' },
+    setMigrationPoint: { default: 'M', name: 'Definir Ponto Máximo' },
+    setMigrationMargin: { default: 'B', name: 'Desenhar Borda de Migração' },
+    addCell: { default: 'Shift+A', name: 'Adicionar Célula' },
+    removeCell: { default: 'Shift+R', name: 'Remover Célula' },
+    clearCells: { default: 'Shift+X', name: 'Limpar Células' },
+    brushTool: { default: 'B', name: 'Pincel (Modo Edição)' },
+    eraserTool: { default: 'E', name: 'Borracha (Modo Edição)' },
+    cancelPaint: { default: 'Escape', name: 'Cancelar Edição/Ferramenta' },
+    toggleAdjustments: { default: 'A', name: 'Painel de Ajustes' },
+    toggleResults: { default: 'R', name: 'Painel de Resultados' },
+    toggleCumulativeResults: { default: 'T', name: 'Painel de Res. Acumulados' },
+    toggleProjectPanel: { default: 'I', name: 'Painel de Projeto' },
+    toggleShortcutsPanel: { default: 'K', name: 'Painel de Atalhos' },
+    toggleSpeedPanel: { default: 'V', name: 'Painel de Análise de Velocidade' },
+    toggleOptionsPanel: { default: 'Alt+O', name: 'Painel de Opções' },
+    toggleHelpPanel: { default: 'F1', name: 'Painel de Ajuda' },
+    addCumulative: { default: 'C', name: 'Adicionar aos Acumulados' },
+    resetAdjustments: { default: 'Alt+R', name: 'Resetar Ajustes de Imagem' }
 };
 
-// Helper function for step navigation shortcuts
-const createStepAction = (stepIndex: number) => () => {
-    const analysis = getActiveAnalysis();
-    if (!analysis) return;
-    // Core step (step 1, index 1) must be complete to unlock subsequent steps
-    const coreStepComplete = analysis.manualDrawnPath.length > 0;
-    const isUnlocked = stepIndex <= 1 || coreStepComplete;
-    if (isUnlocked) {
-        import('./ui').then(m => m.goToWorkflowStep(stepIndex));
-    }
-};
-
-const actions: { [key: string]: { label: string, action: () => void } } = {
-    loadImage: { label: "Carregar Imagem", action: () => elements.imageLoader?.click() },
-    saveAnalysis: { label: "Salvar Análise", action: () => elements.saveAnalyzedButton?.click() },
-    resetAll: { label: "Resetar Tudo", action: () => elements.resetButton?.click() },
-    nextImage: { label: "Próxima Imagem", action: () => elements.mainNextImageButton?.click() },
-    prevImage: { label: "Imagem Anterior", action: () => elements.mainPrevImageButton?.click() },
-    toggleFullscreen: { label: "Tela Cheia", action: () => elements.fullscreenButton?.click() },
-    zoomIn: { label: "Aumentar Zoom", action: () => elements.zoomInButton?.click() },
-    zoomOut: { label: "Reduzir Zoom", action: () => elements.zoomOutButton?.click() },
-    zoomReset: { label: "Resetar Zoom", action: () => elements.zoomResetButton?.click() },
-    paintSpheroid: { label: "Editar Núcleo (Pincel/Borracha)", action: () => elements.paintSpheroidButton?.click() },
-    drawSpheroid: { label: "Contornar Esferoide", action: () => elements.drawSpheroidButton?.click() },
-    magicPaint: { label: "Mágica no Esferoide", action: () => elements.magicPaintButton?.click() },
-    drawMargin: { label: "Desenhar Borda", action: () => elements.drawMarginButton?.click() },
-    undoContour: { label: "Limpar Contorno", action: () => elements.undoPointButton?.click() },
-    setHalo: { label: "Definir Raio Halo", action: () => elements.setHaloPointButton?.click() },
-    setMigration: { label: "Definir Raio Máximo", action: () => elements.setMigrationPointButton?.click() },
-    nextStep: { label: "Próxima Etapa", action: () => import('./ui').then(m => m.completeStepAndAdvance()) },
-    prevStep: { label: "Etapa Anterior", action: () => {
-        const analysis = getActiveAnalysis();
-        if (analysis) {
-            import('./ui').then(m => m.goToWorkflowStep(analysis.currentAnalysisStep - 1));
-        }
-    } },
-    toggleAdjustments: { label: "Painel de Ajustes", action: () => (document.getElementById('header-adjustments-btn') as HTMLButtonElement)?.click() },
-    toggleCumulative: { label: "Tabela de Resultados", action: () => {
-        const container = document.getElementById('cumulative-results-container');
-        if (container?.classList.contains('hidden')) {
-            import('./ui').then(m => m.restorePanel('cumulative'));
-        } else if(elements.toggleCumulativeResultsButton){
-            import('./ui').then(m => m.minimizePanel('cumulative'));
-        }
-    }},
-    confirmOrAdvance: {
-        label: "Confirmar / Avançar",
-        action: () => {
-            const analysis = getActiveAnalysis();
-            if (state.paintModeContext) {
-                elements.confirmPaintButton?.click();
-            } else if (analysis) {
-                switch (analysis.currentAnalysisStep) {
-                    case 1: // Step 2 (Núcleo)
-                        if (analysis.manualDrawnPath.length > 2) {
-                            if (confirm('Deseja confirmar o núcleo e avançar para a etapa de Raios? O Raio do Halo será definido automaticamente.')) {
-                                const { centerX, centerY, coreRadius } = analysis.lastAnalysisResult;
-                                if (centerX !== undefined && coreRadius > 0) {
-                                    analysis.haloRadiusData = {
-                                        radius: coreRadius,
-                                        angle: -Math.PI / 2 // Straight up
-                                    };
-                                    import('./results').then(m => m.calculateAndStoreMigrationMetrics());
-                                    import('./ui').then(m => m.completeStepAndAdvance());
-                                    showToast("Raio do Halo definido automaticamente.");
-                                }
-                            }
-                        }
-                        break;
-                    case 3: // Células
-                        elements.confirmCellCountButton?.click();
-                        break;
-                    case 4: // Borda
-                        elements.confirmAnalysisButton?.click();
-                        break;
-                }
-            }
-        }
-    },
-    goToStep1: { label: "Ir para Etapa 1 (Preparação)", action: createStepAction(0) },
-    goToStep2: { label: "Ir para Etapa 2 (Núcleo)", action: createStepAction(1) },
-    goToStep3: { label: "Ir para Etapa 3 (Raios)", action: createStepAction(2) },
-    goToStep4: { label: "Ir para Etapa 4 (Células)", action: createStepAction(3) },
-    goToStep5: { label: "Ir para Etapa 5 (Borda)", action: createStepAction(4) },
-    undoAction: { label: "Desfazer Ação", action: undo },
-    redoAction: { label: "Refazer Ação", action: redo },
-};
-
-let shortcutMap: { [key: string]: string } = { ...defaultShortcuts };
-
-export function saveShortcuts() {
-    try {
-        localStorage.setItem(SHORTCUT_STORAGE_KEY, JSON.stringify(shortcutMap));
-    } catch (e) { console.error("Failed to save shortcuts:", e); }
-}
+let shortcuts: { [key: string]: string } = {};
 
 export function loadShortcuts() {
-    try {
-        const stored = localStorage.getItem(SHORTCUT_STORAGE_KEY);
-        if (stored) {
-            shortcutMap = { ...defaultShortcuts, ...JSON.parse(stored) };
-        }
-    } catch (e) {
-        console.error("Failed to load shortcuts:", e);
-        shortcutMap = { ...defaultShortcuts };
+    const savedShortcuts = localStorage.getItem(SHORTCUT_STORAGE_KEY);
+    const loadedShortcuts: { [key: string]: string } = savedShortcuts ? JSON.parse(savedShortcuts) : {};
+    for (const action in defaultShortcuts) {
+        shortcuts[action] = loadedShortcuts[action] || defaultShortcuts[action].default;
     }
 }
 
-function formatKey(key: string) {
-    if (key === ' ') return 'Espaço';
-    return key.replace(/Control/g, 'Ctrl').replace(/Arrow/g, '').replace(/([a-z])([A-Z])/g, '$1 $2');
+function saveShortcuts() {
+    localStorage.setItem(SHORTCUT_STORAGE_KEY, JSON.stringify(shortcuts));
 }
 
-export function populateShortcutsPanel() {
-    const list = document.getElementById('shortcuts-list');
-    if (!list) return;
-    list.innerHTML = '';
-    Object.entries(actions).forEach(([actionId, { label }]) => {
-        const shortcut = shortcutMap[actionId as keyof typeof shortcutMap] || 'N/A';
-        const item = document.createElement('div');
-        item.className = 'shortcut-item p-2 bg-gray-800/50 rounded-md';
-        item.innerHTML = `
-            <span class="text-sm text-gray-300">${label}</span>
-            <kbd class="shortcut-key-display font-mono text-teal-300 bg-gray-700 px-2 py-1 rounded-md text-xs">${formatKey(shortcut)}</kbd>
-            <button class="edit-shortcut-btn text-xs bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded-md" data-action="${actionId}">Editar</button>
-        `;
-        list.appendChild(item);
-    });
+function formatKeyString(e: KeyboardEvent): string {
+    const parts = [];
+    if (e.ctrlKey) parts.push('Control');
+    if (e.altKey) parts.push('Alt');
+    if (e.shiftKey) parts.push('Shift');
+    let key = e.key;
+    if (key === ' ') key = 'Space';
+    // Use code for letter keys to avoid issues with keyboard layouts
+    else if (/^Key[A-Z]$/.test(e.code)) key = e.code.replace('Key', '');
+    // For other keys, use key property but maybe capitalize
+    else if (key.length === 1 && key.match(/[a-z]/)) key = key.toUpperCase();
 
-    list.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement;
-        if (target.matches('.edit-shortcut-btn')) {
-            const actionId = target.dataset.action;
-            const display = target.previousElementSibling as HTMLElement;
-            if (actionId && display) listenForNewShortcut(actionId, display);
-        }
-    });
-
-    document.getElementById('resetShortcutsButton')?.addEventListener('click', () => {
-        if (confirm('Tem certeza que deseja resetar todos os atalhos para o padrão?')) {
-            shortcutMap = { ...defaultShortcuts };
-            saveShortcuts();
-            populateShortcutsPanel();
-            showToast('Atalhos restaurados para o padrão.');
-        }
-    });
+    if (!['Control', 'Alt', 'Shift', 'Meta'].includes(key)) parts.push(key);
+    return parts.join('+');
 }
 
-function listenForNewShortcut(actionId: string, displayElement: HTMLElement) {
+
+function listenForShortcut(action: string, button: HTMLButtonElement) {
+    if (state.isListeningForShortcut) return;
     state.isListeningForShortcut = true;
-    displayElement.textContent = 'Pressione a tecla...';
-    displayElement.classList.add('listening');
+    const originalText = button.textContent;
+    button.textContent = 'Pressione...';
+    button.classList.add('listening');
 
-    const keydownHandler = (e: KeyboardEvent) => {
+    const keyListener = (e: KeyboardEvent) => {
         e.preventDefault(); e.stopPropagation();
-        const parts = [];
-        if (e.ctrlKey) parts.push('Control');
-        if (e.altKey) parts.push('Alt');
-        if (e.shiftKey) parts.push('Shift');
-        const keyName = (e.key === ' ' || e.key.length > 1) ? e.key : e.key.toLowerCase();
-        if (!['Control', 'Alt', 'Shift', 'Meta'].includes(keyName)) parts.push(keyName);
-        const newShortcut = parts.join('+');
-        if (newShortcut) {
-            shortcutMap[actionId as keyof typeof shortcutMap] = newShortcut;
-            saveShortcuts();
-            displayElement.textContent = formatKey(newShortcut);
-        } else displayElement.textContent = formatKey(shortcutMap[actionId as keyof typeof shortcutMap]);
+        if (e.key === 'Escape') { 
+            button.textContent = originalText;
+            cleanup(); 
+            return; 
+        }
+        if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+        
+        const newShortcut = formatKeyString(e);
+        shortcuts[action] = newShortcut;
+        button.textContent = newShortcut;
+        saveShortcuts();
         cleanup();
     };
     
-    const clickHandler = () => {
-        displayElement.textContent = formatKey(shortcutMap[actionId as keyof typeof shortcutMap]);
-        cleanup();
-    };
-
+    const clickListener = (e: MouseEvent) => { if (e.target !== button) { button.textContent = originalText; cleanup(); } };
+    
     const cleanup = () => {
-        displayElement.classList.remove('listening');
         state.isListeningForShortcut = false;
-        window.removeEventListener('keydown', keydownHandler, { capture: true });
-        window.removeEventListener('click', clickHandler, { capture: true });
+        button.classList.remove('listening');
+        window.removeEventListener('keydown', keyListener, { capture: true });
+        window.removeEventListener('click', clickListener, { capture: true });
     };
 
-    window.addEventListener('keydown', keydownHandler, { capture: true });
-    window.addEventListener('click', clickHandler, { capture: true });
+    window.addEventListener('keydown', keyListener, { capture: true });
+    window.addEventListener('click', clickListener, { capture: true });
+}
+
+let listenersAttached = false;
+export function populateShortcutsPanel() {
+    const listEl = document.getElementById('shortcuts-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    for (const action in defaultShortcuts) {
+        const item = defaultShortcuts[action];
+        const shortcutItem = document.createElement('div');
+        shortcutItem.className = 'shortcut-item p-2 hover:bg-gray-800 rounded-md';
+        
+        shortcutItem.innerHTML = `
+            <span class="text-sm">${item.name}</span>
+            <button class="shortcut-key-display shortcut-key" data-action="${action}">${shortcuts[action]}</button>
+            <button class="edit-shortcut-btn text-xs font-semibold text-teal-400 hover:text-teal-300 transition-colors" data-action-edit="${action}">Editar</button>
+        `;
+        listEl.appendChild(shortcutItem);
+    }
+    
+    if (!listenersAttached) {
+        listEl.addEventListener('click', (e) => {
+            const target = e.target as HTMLElement;
+            if (target.matches('.edit-shortcut-btn')) {
+                const action = target.dataset.actionEdit;
+                if (action) {
+                    const displayButton = listEl.querySelector<HTMLButtonElement>(`.shortcut-key-display[data-action="${action}"]`);
+                    if (displayButton) listenForShortcut(action, displayButton);
+                }
+            }
+        });
+        
+        const resetButton = document.getElementById('resetShortcutsButton');
+        resetButton?.addEventListener('click', () => {
+             if (confirm('Tem certeza de que deseja resetar todos os atalhos para os padrões?')) {
+                localStorage.removeItem(SHORTCUT_STORAGE_KEY);
+                loadShortcuts();
+                saveShortcuts();
+                populateShortcutsPanel();
+            }
+        });
+        listenersAttached = true;
+    }
 }
 
 export function handleGlobalKeyDown(e: KeyboardEvent) {
-    const target = e.target as HTMLElement;
-    if (state.isListeningForShortcut || target.isContentEditable || target.tagName.match(/INPUT|SELECT|TEXTAREA/)) {
-        return;
+    if (state.isListeningForShortcut || /INPUT|TEXTAREA|SELECT/.test((e.target as HTMLElement).tagName) || (e.target as HTMLElement).isContentEditable) return;
+
+    const keyString = formatKeyString(e);
+    let action: string | undefined;
+
+    // Context-aware shortcuts first (e.g., paint mode)
+    if (state.paintModeContext) {
+        if (keyString.toUpperCase() === shortcuts.brushTool.toUpperCase()) action = 'brushTool';
+        else if (keyString.toUpperCase() === shortcuts.eraserTool.toUpperCase()) action = 'eraserTool';
     }
 
-    const key = e.key.toLowerCase();
-    const actionId = Object.keys(actions).find(act => {
-        const shortcut = shortcutMap[act as keyof typeof shortcutMap];
-        if (!shortcut) return false;
-        const shortcutParts = shortcut.toLowerCase().split('+');
-        const mainKey = shortcutParts.pop();
-        
-        // Handle Ctrl+y for redo, which also triggers history.forward() in some browsers
-        if ((e.ctrlKey || e.metaKey) && key === 'y') {
-            e.preventDefault();
+    // Find the matching action
+    if (!action) {
+        for (const act in shortcuts) {
+            if (shortcuts[act].toUpperCase() === keyString.toUpperCase()) {
+                action = act;
+                break;
+            }
         }
+    }
+    
+    if (!action) return;
+    e.preventDefault();
+    e.stopPropagation();
 
-        return key === mainKey &&
-               (e.ctrlKey || e.metaKey) === shortcutParts.includes('control') &&
-               e.shiftKey === shortcutParts.includes('shift') &&
-               e.altKey === shortcutParts.includes('alt');
-    });
-
-    if (actionId) {
-        e.preventDefault();
-        actions[actionId].action();
-    } else if (state.paintModeContext) {
-        if (key === 'escape') elements.cancelPaintButton?.click();
-    } else if (key === 'escape' && state.currentMode) {
-        import('./ui').then(m => m.setMode(null));
+    switch (action) {
+        case 'newProject': elements.newProjectButton?.click(); break;
+        case 'loadProject': elements.loadProjectInput?.click(); break;
+        case 'loadImage': elements.imageLoader?.click(); break;
+        case 'saveProject': elements.saveProjectButton?.click(); break;
+        case 'deleteImage': elements.mainDeleteImageButton?.click(); break;
+        case 'undo': undo(); break;
+        case 'redo': redo(); break;
+        case 'nextImage': elements.mainNextImageButton?.click(); break;
+        case 'prevImage': elements.mainPrevImageButton?.click(); break;
+        case 'newTab': addNewTab(); break;
+        case 'closeTab': deleteTab(state.activeTabIndex); break;
+        case 'nextTab': if (state.activeTabIndex < state.tabs.length - 1) switchTab(state.activeTabIndex + 1); break;
+        case 'prevTab': if (state.activeTabIndex > 0) switchTab(state.activeTabIndex - 1); break;
+        case 'zoomIn': zoomTo(state.zoom * 1.5); break;
+        case 'zoomOut': zoomTo(state.zoom / 1.5); break;
+        case 'resetView': resetView(); break;
+        case 'toggleFullscreen': elements.fullscreenButton?.click(); break;
+        case 'confirmOrAdvance':
+            if (state.paintModeContext) elements.confirmPaintButton?.click();
+            else {
+                const analysis = getActiveAnalysis();
+                if (analysis) {
+                    if (analysis.currentAnalysisStep === 2) elements.confirmCellCountButton?.click();
+                    else if (analysis.currentAnalysisStep === 3) elements.confirmAnalysisButton?.click();
+                    else import('./ui').then(m => m.completeStepAndAdvance());
+                }
+            }
+            break;
+        case 'goBack': 
+            const analysis = getActiveAnalysis();
+            if (analysis && analysis.currentAnalysisStep > 0) import('./ui').then(m => m.goToWorkflowStep(analysis.currentAnalysisStep - 1));
+            break;
+        case 'clearContour': elements.undoPointButton?.click(); break;
+        case 'setSpheroidContour': elements.drawSpheroidButton?.click(); break;
+        case 'editSpheroid': elements.paintSpheroidButton?.click(); break;
+        case 'magicWand': elements.magicPaintButton?.click(); break;
+        case 'setHaloPoint': elements.setHaloPointButton?.click(); break;
+        case 'setMigrationPoint': elements.setMigrationPointButton?.click(); break;
+        case 'setMigrationMargin': elements.drawMarginButton?.click(); break;
+        case 'addCell': elements.addCellButton?.click(); break;
+        case 'removeCell': elements.removeCellButton?.click(); break;
+        case 'clearCells': elements.clearCellsButton?.click(); break;
+        case 'brushTool': state.isErasing = false; updateBrushToolsUI(); break;
+        case 'eraserTool': state.isErasing = true; updateBrushToolsUI(); break;
+        case 'cancelPaint':
+              if (state.paintModeContext) elements.cancelPaintButton?.click();
+              else setMode(null);
+              break;
+        case 'toggleAdjustments': document.getElementById('header-adjustments-btn')?.click(); break;
+        case 'toggleResults': elements.toggleResultsButton?.click(); break;
+        case 'toggleCumulativeResults': elements.toggleCumulativeResultsButton?.click(); break;
+        case 'toggleProjectPanel': document.getElementById('header-project-btn')?.click(); break;
+        case 'toggleShortcutsPanel': elements.headerShortcutsBtn?.click(); break;
+        case 'toggleSpeedPanel': elements.headerSpeedBtn?.click(); break;
+        case 'toggleOptionsPanel': document.getElementById('header-options-btn')?.click(); break;
+        case 'toggleHelpPanel': document.getElementById('header-help-btn')?.click(); break;
+        case 'addCumulative': elements.addCumulativeButton?.click(); break;
+        case 'resetAdjustments': resetImageAdjustments(); break;
     }
 }

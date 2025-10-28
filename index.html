@@ -18,7 +18,6 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
 <body class="bg-gray-900 text-gray-300 antialiased">
 
@@ -58,7 +57,7 @@
             </div>
 
             <div class="flex items-center gap-2">
-                 <button id="saveAnalyzedButton" title="Salvar Análise (S)" class="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">Salvar Análise</button>
+                 <!-- Botão de Salvar Análise removido -->
             </div>
         </header>
 
@@ -107,6 +106,12 @@
                     <button id="zoomInButton" title="Aumentar Zoom (+)" class="w-10 h-10 flex items-center justify-center text-xl rounded-md hover:bg-gray-700 transition-colors">+</button>
                  </div>
                  <div class="bg-gray-900/80 backdrop-blur-sm p-1 border border-gray-700 rounded-lg mt-2">
+                    <button id="individual-adjustments-btn" title="Ajustes da Imagem Individual" class="w-10 h-10 flex items-center justify-center rounded-md hover:bg-gray-700 transition-colors hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.43 2.43a4.5 4.5 0 008.642-1.128 3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.43 2.43a4.5 4.5 0 008.642-1.128 3 3 0 00-5.78-1.128zM15 4.5a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    </button>
+                    <button id="downloadAnalyzedImageButton" title="Baixar Imagem com Análise" class="w-10 h-10 flex items-center justify-center rounded-md hover:bg-gray-700 transition-colors hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                    </button>
                     <button id="view-controls-icon-btn" title="Opções de Visualização" class="w-10 h-10 flex items-center justify-center rounded-md hover:bg-gray-700 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                     </button>
@@ -160,11 +165,13 @@
                 <div class="resize-handle"></div>
             </div>
 
-            <div id="main-image-nav" class="absolute hidden bottom-4 left-1/2 -translate-x-1/2 z-30 items-center gap-2 bg-gray-900/80 backdrop-blur-sm p-2 border border-gray-700 rounded-lg">
-                <button id="main-prevImageButton" class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 px-3 rounded-lg transition-colors text-sm">&lt; Anterior</button>
-                <span id="main-imageNavStatus" class="text-sm font-medium text-gray-400 px-2 truncate"></span>
-                <button id="main-nextImageButton" class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 px-3 rounded-lg transition-colors text-sm">Próximo &gt;</button>
-                <button id="main-deleteImageButton" title="Deletar Imagem" class="p-2 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
+            <div id="main-image-nav" class="absolute hidden bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-gray-900/80 backdrop-blur-sm p-2 border border-gray-700 rounded-lg">
+                <button id="main-prevImageButton" class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 px-3 rounded-lg transition-colors text-sm flex-shrink-0">&lt; Anterior</button>
+                <span id="main-image-info" class="text-sm font-semibold text-teal-300 px-2 truncate min-w-0 flex-shrink" title=""></span>
+                <button id="main-nextImageButton" class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 px-3 rounded-lg transition-colors text-sm flex-shrink-0">Próximo &gt;</button>
+                <button id="main-deleteImageButton" title="Deletar Imagem" class="p-2 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+                </button>
             </div>
 
             <div id="toast-notification" class="hidden opacity-0 -translate-y-12 fixed top-5 left-1/2 -translate-x-1/2 bg-teal-500/90 text-white text-sm font-semibold py-2 px-5 rounded-lg shadow-lg z-50">
@@ -180,10 +187,12 @@
                         <button id="brush-tool-paint" class="tool-button w-full py-2 px-4 rounded-md text-sm font-semibold transition-colors flex items-center justify-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M15.823 2.22a.5.5 0 0 0-.433-.433l-2.028-.288a.5.5 0 0 0-.288.11L11.5 3.186l2.314 2.314 1.572-1.572a.5.5 0 0 0 .11-.288l-.288-2.028zM10.5 4.186l-7.25 7.25a.5.5 0 0 0-.146.353V14.5a.5.5 0 0 0 .5.5h2.75a.5.5 0 0 0 .354-.146L14.814 7.5 10.5 4.186zM2.5 12.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5z"/></svg>
                             Pincel
+                            <kbd class="shortcut-key">B</kbd>
                         </button>
                         <button id="brush-tool-erase" class="tool-button w-full py-2 px-4 rounded-md text-sm font-semibold transition-colors flex items-center justify-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8.086 2.207a2 2 0 0 1 2.828 0l3.879 3.879a2 2 0 0 1 0 2.828l-5.5 5.5A2 2 0 0 1 7.879 15H5.12a2 2 0 0 1-1.414-.586l-2.5-2.5a2 2 0 0 1 0-2.828l6.879-6.879zm2.121.707a1 1 0 0 0-1.414 0L4.16 7.547l5.293 5.293 4.633-4.633a1 1 0 0 0 0-1.414l-3.879-3.879zM8.746 13.547 3.453 8.254 1.914 9.793a1 1 0 0 0 0 1.414l2.5 2.5a1 1 0 0 0 .707.293H7.88a1 1 0 0 0 .707-.293l.16-.16z"/></svg>
                             Borracha
+                            <kbd class="shortcut-key">E</kbd>
                         </button>
                     </div>
                     <label class="text-sm font-medium">Tamanho do Pincel</label>
@@ -242,7 +251,7 @@
                 <span>Criado por <strong>Irlã Lima</strong></span>
                 <span class="border-l border-gray-600 pl-4">Versão 2.0</span>
                 <div class="flex items-center gap-3">
-                    <a href="https://instagram.com/oxebiologo" target="_blank" title="Instagram" class="hover:text-teal-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0C5.829 0 5.556.01 4.703.048 3.85.088 3.269.222 2.76.42a3.917 3.917 0 0 0-1.417.923A3.927 3.927 0 0 0 .42 2.76C.222 3.268.087 3.85.048 4.7.01 5.555 0 5.827 0 8.001c0 2.172.01 2.444.048 3.297.04.852.174 1.433.372 1.942.205.526.478.972.923 1.417.444.445.89.719 1.416.923.51.198 1.09.333 1.942.372C5.555 15.99 5.827 16 8 16s2.444-.01 3.298-.048c.851-.04 1.434-.174 1.943-.372a3.916 3.916 0 0 0 1.416-.923c.445-.445.718-.891.923-1.417.197-.509.332-1.09.372-1.942C15.99 10.445 16 10.173 16 8s-.01-2.445-.048-3.299c-.04-.851-.175-1.433-.372-1.941a3.926 3.926 0 0 0-.923-1.417A3.911 3.911 0 0 0 13.24.42c-.51-.198-1.092-.333-1.943-.372C10.443.01 10.172 0 7.998 0h.003zm-.717 1.442h.718c2.136 0 2.389.007 3.232.046.78.035 1.204.166 1.486.275.373.145.64.319.92.599.28.28.453.546.598.92.11.281.24.705.275 1.485.039.843.047 1.096.047 3.231s-.008 2.389-.047 3.232c-.035.78-.166 1.203-.275 1.485a2.47 2.47 0 0 1-.599.919c-.28.28-.546.453-.92.598-.28.11-.704.24-1.485.276-.843.038-1.096.047-3.232.047s-2.39-.009-3.233-.047c-.78-.036-1.203-.166-1.485-.276a2.478 2.478 0 0 1-.92-.598 2.48 2.48 0 0 1-.6-.92c-.109-.281-.24-.705-.275-1.485-.038-.843-.046-1.096-.046-3.231 0-2.136.008-2.388.046-3.231.036-.78.166-1.204.276-1.486.145-.373.319-.64.599-.92.28-.28.546-.453.92-.598.282-.11.705-.24 1.485-.276.738-.034 1.024-.044 2.515-.045v.002zm4.988 1.884a1.161 1.161 0 1 0 0 2.322 1.161 1.161 0 0 0 0-2.322zM8 4.405a3.595 3.595 0 1 0 0 7.19 3.595 3.595 0 0 0 0-7.19zm0 1.441a2.155 2.155 0 1 1 0 4.31 2.155 2.155 0 0 1 0-4.31z"/></svg></a>
+                    <a href="https://instagram.com/oxebiologo" target="_blank" title="Instagram" class="hover:text-teal-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0C5.829 0 5.556.01 4.703.048 3.85.088 3.269.222 2.76.42a3.917 3.917 0 0 0-1.417.923A3.927 3.927 0 0 0 .42 2.76C.222 3.268.087 3.85.048 4.7.01 5.555 0 5.827 0 8.001c0 2.172.01 2.444.048 3.297.04.852.174 1.433.372 1.942.205.526.478.972.923 1.417.444.445.89.719 1.416.923.51.198 1.09.333 1.942.372C5.555 15.99 5.827 16 8 16s2.444-.01 3.298-.048c.851-.04 1.434-.174 1.943-.372a3.916 3.916 0 0 0 1.416-.923c.445-.445.718-.891.923-1.417.197-.509.332-1.09.372-1.942C15.99 10.445 16 10.173 16 8s-.01-2.445-.048-3.299c-.04-.851-.175-1.433-.372-1.941a3.926 3.926 0 0 0-.923-1.417A3.911 3.911 0 0 0 13.24.42c-.51-.198-1.092-.333-1.943-.372C10.443.01 10.172 0 7.998 0h.003zm-.717 1.442h.718c2.136 0 2.389.007 3.232.046.78.035 1.204.166 1.486.275.373.145.64.319.92.599.28.28.453.546.598.92.11.281.24.705.275 1.485.039.843.047 1.096.047 3.231s-.008 2.389-.047 3.232c-.035.78-.166 1.203-.275 1.485a2.47 2.47 0 0 1-.599.919c-.28.28-.546.453-.92.598-.28.11-.704.24-1.485.276-.843.038-1.096.047-3.232.047s-2.39-.009-3.233-.047c-.78-.036-1.203-.166-1.485-.276a2.478 2.478 0 0 1-.92-.598 2.48 2.48 0 0 1-.6-.92c-.109-.281-.24-.705-.275-1.485-.038-.843-.046-1.096-.046-3.231 0-2.136.008-2.388.046-3.231.036-.78.166-1.204.276-1.486.145-.373.319-.64.599-.92.28-.28.546.453.92-.598.282-.11.705-.24 1.485-.276.738-.034 1.024-.044 2.515-.045v.002zm4.988 1.884a1.161 1.161 0 1 0 0 2.322 1.161 1.161 0 0 0 0-2.322zM8 4.405a3.595 3.595 0 1 0 0 7.19 3.595 3.595 0 0 0 0-7.19zm0 1.441a2.155 2.155 0 1 1 0 4.31 2.155 2.155 0 0 1 0-4.31z"/></svg></a>
                     <a href="https://www.linkedin.com/in/irl%C3%A3-lima-473a10267/" target="_blank" title="LinkedIn" class="hover:text-teal-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M0 1.146C0 .513.526 0 1.175 0h13.65C15.474 0 16 .513 16 1.146v13.708c0 .633-.526 1.146-1.175 1.146H1.175C.526 16 0 15.487 0 14.854V1.146zm4.943 12.248V6.169H2.542v7.225h2.401zm-1.2-8.212c.837 0 1.358-.554 1.358-1.248-.015-.709-.52-1.248-1.342-1.248-.822 0-1.359.54-1.359 1.248 0 .694.521 1.248 1.327 1.248h.016zm4.908 8.212V9.359c0-.216.016-.432.08-.586.173-.431.568-.878 1.232-.878.869 0 1.216.662 1.216 1.634v3.865h2.401V9.25c0-2.22-1.184-3.252-2.764-3.252-1.274 0-1.845.7-2.165 1.193v.025h-.016a5.54 5.54 0 0 1 .016-.025V6.169h-2.4c.03.678 0 7.225 0 7.225h2.4z"/></svg></a>
                     <a href="mailto:Sci.lima@outlook.com" target="_blank" title="Email" class="hover:text-teal-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M.05 3.555A2 2 0 0 1 2 2h12a2 2 0 0 1 1.95 1.555L8 8.414.05 3.555ZM0 4.697v7.104l5.803-3.558L0 4.697ZM6.761 8.83l-6.57 4.027A2 2 0 0 0 2 14h12a2 2 0 0 0 1.808-1.144l-6.57-4.027L8 9.586l-1.239-.757Zm3.436-.586L16 11.801V4.697l-5.803 3.546Z"/></svg></a>
                     <a href="https://orcid.org/0009-0002-4394-0070" target="_blank" title="ORCID" class="hover:text-teal-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="#a6ce39" viewBox="0 0 256 256"><path d="M256,128c0,70.7-57.3,128-128,128S0,198.7,0,128,57.3,0,128,0,256,57.3,256,128Z"/><path d="M128,32.4A95.6,95.6,0,1,1,32.4,128,95.7,95.7,0,0,1,128,32.4M114.3,205.1h27.4V108.4H114.3ZM102.1,78.1a25.9,25.9,0,1,1,25.9,25.9,25.9,25.9,0,0,1-25.9-25.9Z" fill="#fff"/></svg></a>
@@ -266,8 +275,8 @@
                         <summary><h5 class="font-semibold text-gray-300 text-base">Projetos: Salvando Tudo</h5></summary>
                         <div class="subsection-content space-y-2">
                             <ul>
-                                <li><strong>O que é um Projeto?</strong> Pense no projeto como um arquivo mestre (<code>.spheroidproj</code>) que salva TUDO: todas as suas abas, imagens, análises, resultados acumulados, notas e configurações. É a forma mais segura de guardar e compartilhar seu progresso.</li>
-                                <li><strong>Salvando e Carregando:</strong> Use o painel <strong>Projeto</strong> (ícone de pasta na barra superior) para <code>Salvar</code> seu projeto atual ou <code>Carregar</code> um projeto existente. Você também pode <code>Importar Abas</code> de outro projeto para o seu trabalho atual.</li>
+                                <li><strong>O que é um Projeto?</strong> Pense no projeto como um arquivo mestre (<code>.spheroidproj</code>) que salva TUDO: todas as suas abas, imagens, análises, resultados e configurações.</li>
+                                <li><strong>Salvando e Carregando:</strong> Use o painel <strong>Projeto</strong> para <code>Salvar</code> (<kbd>Ctrl</kbd>+<kbd>S</kbd>) seu projeto atual ou <code>Carregar</code> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>O</kbd>) um projeto existente. Você também pode criar um <code>Novo Projeto</code> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>N</kbd>).</li>
                             </ul>
                         </div>
                     </details>
@@ -275,22 +284,18 @@
                         <summary><h5 class="font-semibold text-gray-300 text-base">Abas: Organizando Experimentos</h5></summary>
                         <div class="subsection-content space-y-2">
                             <ul>
-                                <li><strong>O Poder das Abas:</strong> As abas permitem que você trabalhe em diferentes experimentos ou grupos de imagens ao mesmo tempo, mantendo os resultados separados.
-                                    <br><strong>Dica de Mestre:</strong> Crie uma aba para cada condição experimental (ex: "Controle", "Tratamento 10µM") ou para cada réplica (ex: "N1", "N2", "N3"). Isso é essencial para usar a ferramenta de Análise de Velocidade.
+                                <li><strong>O Poder das Abas:</strong> As abas permitem que você agrupe diferentes experimentos ou condições, mantendo os resultados separados.
+                                    <br><strong>Dica de Mestre:</strong> Crie uma aba para cada condição (ex: "Controle", "Tratamento 10µM") ou para cada ponto de tempo (ex: "Dia 0", "Dia 1") para usar a ferramenta de Análise de Velocidade.
                                 </li>
-                                 <li><strong>Gerenciando Abas:</strong> Clique no botão <code>+</code> para adicionar uma nova aba. Dê um <strong>duplo clique</strong> no nome de uma aba para renomeá-la. Você também pode arrastar e soltar as abas para reordená-las.</li>
+                                 <li><strong>Gerenciando Abas:</strong> Clique no <code>+</code> para adicionar uma nova aba (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd>). Dê um <strong>duplo clique</strong> no nome para renomeá-la. Use <kbd>Ctrl</kbd>+<kbd>Tab</kbd> para navegar entre as abas.</li>
                             </ul>
                         </div>
                     </details>
                     <details class="subsection-details">
-                        <summary><h5 class="font-semibold text-gray-300 text-base">Imagens: Carregando e Navegando</h5></summary>
+                        <summary><h5 class="font-semibold text-gray-300 text-base">Imagens: Carregando e Baixando</h5></summary>
                         <div class="subsection-content space-y-2">
-                            <p>Você pode carregar suas imagens de duas maneiras:</p>
-                            <ol>
-                                <li><strong>Pelo Seletor de Arquivos:</strong> No painel <strong>Projeto</strong>, use o botão de upload para selecionar uma ou <strong>múltiplas imagens</strong> de uma vez.</li>
-                                <li><strong>Arrastar e Soltar:</strong> Simplesmente arraste suas imagens de uma pasta e solte-as na área principal do aplicativo. Se já houver imagens carregadas, você poderá escolher entre <strong>Substituir</strong> a lista atual ou <strong>Adicionar</strong> as novas imagens à lista.</li>
-                            </ol>
-                            <p>Quando múltiplas imagens são carregadas na mesma aba, uma barra de navegação aparecerá na parte inferior, permitindo que você alterne entre elas com os botões ou com as setas <kbd>←</kbd> e <kbd>→</kbd> do teclado.</p>
+                            <p>Carregue suas imagens (<kbd>Ctrl</kbd>+<kbd>O</kbd>) através do painel <strong>Projeto</strong> ou arrastando e soltando os arquivos na tela principal. Todas as imagens são convertidas para <strong>8-bit (tons de cinza)</strong> automaticamente para garantir a consistência da análise.</p>
+                            <p>Para salvar a imagem atual com todas as análises visíveis (contornos, células, réguas), clique no botão <strong>Download</strong> <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="inline-block"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg> nos controles flutuantes no canto superior direito.</p>
                         </div>
                     </details>
                 </div>
@@ -299,154 +304,128 @@
             <details class="subsection-details">
                 <summary><h4 class="font-semibold text-gray-300 text-base">Fluxo de Análise: Passo a Passo</h4></summary>
                 <div class="subsection-content space-y-3">
-                    <p>O painel <strong>Fluxo de Análise</strong> guia você por 5 etapas essenciais. Use <kbd>Enter</kbd> para avançar e <kbd>Backspace</kbd> para voltar.</p>
+                    <p>O painel <strong>Fluxo de Análise</strong> guia você por 4 etapas. Use <kbd>Enter</kbd> para avançar e <kbd>Backspace</kbd> para voltar.</p>
                     <ol>
-                        <li><strong>Preparação:</strong> Converte sua imagem para 8-bit (tons de cinza), essencial para a análise. Se a imagem já for 8-bit, esta etapa é pulada automaticamente.</li>
-                        <li><strong>Núcleo:</strong> Defina a área do núcleo do esferoide. Você tem três ferramentas:
-                            <ul class="list-disc pl-5">
-                                <li><kbd>D</kbd> <strong>Contorno:</strong> Clique e arraste para desenhar a borda.</li>
-                                <li><kbd>P</kbd> <strong>Editar Núcleo:</strong> Pinte a área do núcleo. Use a borracha para corrigir.</li>
-                                <li><kbd>G</kbd> <strong>Mágica:</strong> Clique dentro do núcleo para uma seleção automática.</li>
-                            </ul>
-                            Após a seleção, use o botão <strong>Ajuste de Borda</strong> para refinar o contorno automaticamente.
-                        </li>
-                        <li><strong>Raios:</strong> Marque os pontos de referência para medição.
-                            <ul class="list-disc pl-5">
-                                <li><kbd>H</kbd> <strong>Raio do Halo:</strong> Clique para marcar um ponto de referência para o halo de migração.</li>
-                                <li><kbd>M</kbd> <strong>Ponto Máximo:</strong> Clique na célula migratória mais distante do núcleo.</li>
-                            </ul>
-                        </li>
-                        <li><strong>Células:</strong> Ative o modo de contagem para clicar e <code>Adicionar</code> ou <code>Remover</code> células na área de migração. Pressione <kbd>Enter</kbd> para confirmar.</li>
-                        <li><strong>Borda:</strong> Defina a fronteira final da migração usando <kbd>B</kbd> <strong>Desenhar Borda</strong> ou <strong>Pintar Borda</strong>. Pressione <kbd>Enter</kbd> para finalizar a análise desta imagem.</li>
+                        <li><strong>Núcleo:</strong> Defina o núcleo com as ferramentas de <kbd>D</kbd> Contorno, <kbd>P</kbd> Editar/Pintar ou <kbd>G</kbd> Mágica. No modo de edição, use <kbd>B</kbd> para Pincel e <kbd>E</kbd> para Borracha.</li>
+                        <li><strong>Raios:</strong> Marque os pontos de <kbd>H</kbd> Halo e <kbd>M</kbd> Migração Máxima.</li>
+                        <li><strong>Células:</strong> Conte as células com os atalhos: <kbd>Shift</kbd>+<kbd>A</kbd> para Adicionar, <kbd>Shift</kbd>+<kbd>R</kbd> para Remover e <kbd>Shift</kbd>+<kbd>X</kbd> para Limpar.</li>
+                        <li><strong>Borda:</strong> Defina a fronteira final da migração usando as ferramentas de desenho ou pintura.</li>
                     </ol>
+                </div>
+            </details>
+
+            <details class="subsection-details">
+                <summary><h4 class="font-semibold text-gray-300 text-base">Atalhos Essenciais</h4></summary>
+                <div class="subsection-content space-y-2">
+                    <ul class="list-disc pl-5 space-y-1">
+                        <li><kbd>Ctrl</kbd>+<kbd>S</kbd>: Salvar Projeto</li>
+                        <li><kbd>Ctrl</kbd>+<kbd>O</kbd>: Carregar Imagens</li>
+                        <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Y</kbd>: Desfazer / Refazer</li>
+                        <li><kbd>←</kbd> / <kbd>→</kbd>: Imagem Anterior / Próxima</li>
+                        <li><kbd>B</kbd> / <kbd>E</kbd>: Pincel / Borracha (no modo de edição)</li>
+                        <li><kbd>Shift</kbd>+<kbd>A</kbd> / <kbd>R</kbd> / <kbd>X</kbd>: Adicionar / Remover / Limpar Células</li>
+                        <li><kbd>A</kbd>: Abrir painel de Ajustes de Imagem</li>
+                        <li><kbd>F1</kbd>: Abrir este painel de Ajuda</li>
+                    </ul>
+                    <p>Para ver e personalizar todos os atalhos, abra o painel <strong>Atalhos do Teclado</strong> (<kbd>K</kbd>).</p>
                 </div>
             </details>
 
             <details class="subsection-details">
                 <summary><h4 class="font-semibold text-gray-300 text-base">Painéis de Ferramentas: Um Guia</h4></summary>
                 <div class="subsection-content space-y-2">
-                    <p>Todos os painéis podem ser arrastados pela barra de título, redimensionados pelo canto inferior direito e minimizados para manter sua área de trabalho limpa.</p>
+                    <p>Todos os painéis podem ser arrastados, redimensionados e minimizados para manter sua área de trabalho limpa.</p>
                     <details class="subsection-details">
                         <summary><h5 class="font-semibold text-gray-300 text-base">Ajustes de Imagem (A)</h5></summary>
                         <div class="subsection-content space-y-2">
-                            <p>Melhore a visualização da sua imagem para facilitar a análise.</p>
-                            <ul>
-                                <li><strong>Cor e Tom:</strong> Ajuste brilho, contraste, nitidez, realces e sombras.</li>
-                                <li><strong>Subtração de Fundo:</strong> Clique em "Selecionar Fundo" e depois em uma área da imagem para remover digitalmente o fundo, melhorando o contraste do esferoide.</li>
-                                <li><strong>Binarização:</strong> Converta a área de migração para preto e branco com base em um limiar, útil para destacar células.</li>
-                            </ul>
-                        </div>
-                    </details>
-                    <details class="subsection-details">
-                        <summary><h5 class="font-semibold text-gray-300 text-base">Opções e Configurações</h5></summary>
-                        <div class="subsection-content space-y-2">
+                            <p>Melhore a visualização da sua imagem. Você pode definir o <strong>escopo</strong> dos seus ajustes:</p>
                              <ul>
-                                <li><strong>Escala:</strong> A configuração mais importante! Meça a barra de escala da sua imagem com um software como o ImageJ, insira os valores de pixels (px) e sua correspondência em micrômetros (µm) para garantir que todas as medições sejam precisas.</li>
-                                <li><strong>Aparência:</strong> Personalize as fontes e tamanhos dos textos exibidos sobre a imagem (réguas, números de células).</li>
-                                <li><strong>Perfis:</strong> Salve um conjunto de configurações de escala e aparência como um perfil para carregá-lo rapidamente em outros projetos.</li>
+                                <li><strong>Global:</strong> Aplica os mesmos ajustes a <strong>todas as imagens</strong> em <strong>todas as abas</strong>. Ideal para consistência.</li>
+                                <li><strong>Aba:</strong> Aplica os ajustes a todas as imagens <strong>dentro da aba atual</strong>.</li>
+                                <li><strong>Imagem:</strong> Cria uma configuração única e exclusiva para a imagem que você está vendo.</li>
                             </ul>
                         </div>
                     </details>
                     <details class="subsection-details">
-                        <summary><h5 class="font-semibold text-gray-300 text-base">Opções de Visualização</h5></summary>
-                        <div class="subsection-content space-y-2">
-                            <p>Controle quais elementos de análise são exibidos sobre a imagem. Este painel aparece ao clicar no ícone de olho no canto superior direito.</p>
-                             <ul>
-                                <li><strong>Mostrar Círculos:</strong> Ative ou desative a exibição dos círculos de referência para o Halo e o Raio Máximo.</li>
-                                <li><strong>Mostrar Réguas:</strong> Exiba ou oculte as linhas e os valores de medição dos raios.</li>
-                                <li><strong>Pintar/Numerar Células:</strong> Escolha se as células contadas devem ser destacadas com uma pintura ou numeradas individualmente.</li>
-                                <li><strong>Espessura da Linha:</strong> Ajuste a espessura de todos os contornos e linhas de análise.</li>
-                            </ul>
-                        </div>
-                    </details>
-                    <details class="subsection-details">
-                        <summary><h5 class="font-semibold text-gray-300 text-base">Stickers (Notas Adesivas)</h5></summary>
-                        <div class="subsection-content space-y-2">
-                            <p>Adicione notas adesivas em qualquer lugar da sua análise para lembretes ou observações importantes sobre uma imagem. Cada aba tem seu próprio conjunto de stickers. Personalize cor, fonte e tamanho clicando no ícone de engrenagem.</p>
-                        </div>
-                    </details>
-                     <details class="subsection-details">
                         <summary><h5 class="font-semibold text-gray-300 text-base">Análise de Velocidade</h5></summary>
                         <div class="subsection-content space-y-2">
-                            <p>Esta ferramenta poderosa calcula automaticamente as velocidades de migração e proliferação ao longo do tempo. Para usar:</p>
+                            <p>Esta ferramenta calcula automaticamente as velocidades de migração e proliferação ao longo do tempo. Para usar:</p>
                             <ol>
-                                <li>Organize suas imagens em abas separadas por condição experimental.</li>
+                                <li>Organize suas imagens em abas separadas por condição ou tempo.</li>
                                 <li>No painel, selecione as abas que deseja comparar.</li>
-                                <li>Para cada imagem listada na tabela, insira o ponto de tempo correspondente (em dias).</li>
-                                <li>Clique em "Calcular Velocidades" para ver os resultados. Você pode copiar os dados para colar em softwares como o Prism.</li>
+                                <li>Insira o ponto de tempo (em dias) para cada aba na tabela.</li>
+                                <li>Clique em "Calcular Velocidades".</li>
                             </ol>
-                            <p>A fórmula usada é a taxa de variação padrão:</p>
-                            <p><code>Velocidade = (Valor₂ - Valor₁) / (Tempo₂ - Tempo₁)</code></p>
                         </div>
                     </details>
                 </div>
             </details>
             
-            <details class="subsection-details">
+            <details class="subsection-details" open>
                 <summary><h4 class="font-semibold text-gray-300 text-base">Entendendo os Resultados e Fórmulas</h4></summary>
                 <div class="subsection-content space-y-2">
-                    <p>O painel de Resultados exibe métricas detalhadas. Clique em cada item para ver a explicação e a fórmula utilizada.</p>
-                    <details class="subsection-details">
-                        <summary>Diâmetro Máximo</summary>
-                        <div class="subsection-content space-y-2">
-                            <p>A maior distância em linha reta entre quaisquer dois pontos no contorno do núcleo. Mede a extensão máxima do esferoide.</p>
+                    <p>O painel de Resultados exibe métricas detalhadas. Estas métricas são calculadas com base nas fórmulas do manual de referência AnaSP. Clique em cada item para ver a explicação e a fórmula utilizada.</p>
+                    <dl class="space-y-2">
+                        <div class="formula-item">
+                            <dt>Área de Migração</dt>
+                            <dd>Quantifica o espaço total, em micrômetros quadrados (µm²), ocupado pelas células que migraram para fora do núcleo.
+                            <br><code>Fórmula: Área da Borda Externa - Área do Núcleo</code></dd>
                         </div>
-                    </details>
-                    <details class="subsection-details">
-                        <summary>Área de Migração</summary>
-                        <div class="subsection-content space-y-2">
-                            <p>Quantifica o espaço total ocupado pelas células que migraram para fora do núcleo.</p>
-                            <p><code>Fórmula: (Área da Borda Externa) - (Área do Núcleo)</code></p>
+                        <div class="formula-item">
+                            <dt>Circularidade</dt>
+                            <dd>Mede o quão próximo o esferoide está de um círculo perfeito (valor 1.0). Esta métrica usa o "invólucro convexo" (a menor forma convexa que envolve o objeto), tornando-a robusta a bordas irregulares.
+                            <br><code>Fórmula: 4 * π * Área / (Perímetro Convexo)²</code></dd>
                         </div>
-                    </details>
-                    <details class="subsection-details">
-                        <summary>Circularidade</summary>
-                        <div class="subsection-content space-y-2">
-                            <p>Mede o quão próximo o esferoide está de um círculo perfeito, usando o "invólucro convexo" (como um elástico esticado ao redor da forma). Um valor de 1.0 indica um círculo perfeito. É robusto a bordas irregulares.</p>
-                            <p><code>Fórmula: (4 * π * Área) / (Perímetro do Contorno Convexo)²</code></p>
+                        <div class="formula-item">
+                            <dt>Compacidade</dt>
+                            <dd>Semelhante à circularidade, mas usa o perímetro real do objeto. É mais sensível a irregularidades e reentrâncias na borda.
+                            <br><code>Fórmula: 4 * π * Área / Perímetro²</code></dd>
                         </div>
-                    </details>
-                    <details class="subsection-details">
-                        <summary>Compacidade</summary>
-                        <div class="subsection-content space-y-2">
-                            <p>Semelhante à circularidade, mas usa o perímetro real da forma, sendo mais sensível a irregularidades e reentrâncias na borda.</p>
-                            <p><code>Fórmula: (4 * π * Área) / (Perímetro Real)²</code></p>
+                        <div class="formula-item">
+                            <dt>Convexidade</dt>
+                            <dd>Compara o perímetro do invólucro convexo com o perímetro real. Um valor próximo de 1 indica uma forma convexa e suave.
+                            <br><code>Fórmula: Perímetro Convexo / Perímetro</code></dd>
                         </div>
-                    </details>
-                     <details class="subsection-details">
-                        <summary>Esfericidade</summary>
-                        <div class="subsection-content space-y-2">
-                            <p>Compara o perímetro da forma com o perímetro de um círculo perfeito que tenha a mesma área. Um valor de 1.0 indica uma forma perfeitamente circular.</p>
-                            <p><code>Fórmula: (π * Diâmetro Equivalente) / Perímetro Real</code></p>
+                        <div class="formula-item">
+                            <dt>Esfericidade</dt>
+                            <dd>Compara o perímetro da forma com o perímetro de um círculo de área equivalente. Um valor de 1.0 indica uma forma perfeitamente esférica.
+                            <br><code>Fórmula: π * √(4 * Área / π) / Perímetro</code></dd>
                         </div>
-                    </details>
-                    <details class="subsection-details">
-                        <summary>Solidez</summary>
-                        <div class="subsection-content space-y-2">
-                            <p>Mede a "integridade" da forma, comparando sua área com a área do seu invólucro convexo. Um esferoide com muitas reentrâncias ou buracos terá uma solidez menor.</p>
-                            <p><code>Fórmula: Área / Área do Contorno Convexo</code></p>
+                        <div class="formula-item">
+                            <dt>Solidez</dt>
+                            <dd>Mede a "integridade" da forma, comparando sua área com a área do seu invólucro convexo.
+                            <br><code>Fórmula: Área / Área Convexa</code></dd>
                         </div>
-                    </details>
-                    <details class="subsection-details">
-                        <summary>Convexidade</summary>
-                        <div class="subsection-content space-y-2">
-                            <p>Compara o perímetro do invólucro convexo com o perímetro real. Um valor próximo de 1 indica uma forma mais convexa e suave, com poucas reentrâncias.</p>
-                            <p><code>Fórmula: Perímetro do Contorno Convexo / Perímetro Real</code></p>
-                        </div>
-                    </details>
-                    <details class="subsection-details">
-                        <summary>Métricas de Textura (Tom de Cinza)</summary>
-                        <div class="subsection-content space-y-2">
-                            <p>Estas são estatísticas calculadas a partir dos valores de brilho (tons de cinza) dos pixels <strong>dentro</strong> do núcleo. Elas podem indicar a densidade, uniformidade e complexidade da textura do esferoide.</p>
-                             <ul>
-                                <li><strong>Média:</strong> O brilho médio dos pixels.</li>
-                                <li><strong>Variância:</strong> O quão espalhados os valores de brilho estão em relação à média.</li>
-                                <li><strong>Entropia:</strong> Mede a aleatoriedade e complexidade da textura. Uma entropia alta indica uma textura mais complexa e menos uniforme. <code>Fórmula: -Σ(pᵢ * log₂(pᵢ))</code>, onde pᵢ é a probabilidade de ocorrência de cada tom de cinza.</li>
-                                <li><strong>Skewness:</strong> Mede a assimetria da distribuição dos tons de cinza.</li>
-                                <li><strong>Kurtosis:</strong> Mede o "achatamento" da distribuição dos tons de cinza, indicando a presença de valores extremos.</li>
-                            </ul>
-                        </div>
-                    </details>
+                        
+                        <details class="subsection-details">
+                            <summary><h5 class="font-semibold text-gray-300 text-base">Métricas de Textura (Tom de Cinza)</h5></summary>
+                            <div class="subsection-content space-y-2">
+                                <p class="text-xs">Estatísticas calculadas a partir dos valores de brilho dos pixels dentro do núcleo do esferoide. Elas podem indicar densidade, uniformidade e complexidade da textura.</p>
+                                <dl class="space-y-2">
+                                    <div class="formula-item">
+                                        <dt>Média (GL)</dt>
+                                        <dd>O brilho médio dos pixels dentro do núcleo.<br><code>Fórmula: (1/N) * Σ Aᵢ</code></dd>
+                                    </div>
+                                    <div class="formula-item">
+                                        <dt>Variância (Amostral) (GL)</dt>
+                                        <dd>Mede a dispersão dos valores de brilho em relação à média (usa o estimador amostral para alinhar com softwares estatísticos).<br><code>Fórmula: (1/(N-1)) * Σ(Aᵢ - μ)²</code></dd>
+                                    </div>
+                                    <div class="formula-item">
+                                        <dt>Entropia</dt>
+                                        <dd>Mede a aleatoriedade e a complexidade da textura. Valores mais altos indicam uma textura mais complexa e menos homogênea.<br><code>Fórmula: -Σ(pᵢ * log₂(pᵢ))</code></dd>
+                                    </div>
+                                    <div class="formula-item">
+                                        <dt>Skewness</dt>
+                                        <dd>Mede a assimetria da distribuição dos tons de cinza em relação à média.<br><code>Fórmula: ( (1/N) * Σ(Aᵢ-μ)³ ) / s³</code><br><span class="text-xs text-gray-400">Onde 's' é o desvio padrão amostral.</span></dd>
+                                    </div>
+                                    <div class="formula-item">
+                                        <dt>Kurtosis</dt>
+                                        <dd>Mede o "achatamento" da distribuição, indicando a proeminência de valores extremos (caudas da distribuição).<br><code>Fórmula: ( (1/N) * Σ(Aᵢ-μ)⁴ ) / s⁴</code><br><span class="text-xs text-gray-400">Onde 's' é o desvio padrão amostral.</span></dd>
+                                    </div>
+                                </dl>
+                            </div>
+                        </details>
+                    </dl>
                 </div>
             </details>
         
@@ -470,14 +449,21 @@
                 <summary><h4 class="font-semibold text-gray-400 text-sm">Gerenciador de Projetos</h4></summary>
                 <div class="subsection-content px-3 pt-2 pb-3 space-y-3">
                     <div class="space-y-2">
-                        <label class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm text-center cursor-pointer block">
-                            Carregar Projeto
+                        <label class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm text-center cursor-pointer block flex items-center justify-center gap-2">
+                            <span>Carregar Projeto</span>
+                            <kbd class="shortcut-key ml-0">Ctrl+Alt+O</kbd>
                             <input type="file" id="loadProjectInput" class="hidden" accept=".spheroidproj">
                         </label>
-                        <button id="newProjectButton" class="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm">Novo Projeto</button>
+                        <button id="newProjectButton" class="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm flex items-center justify-center gap-2">
+                            <span>Novo Projeto</span>
+                            <kbd class="shortcut-key ml-0">Ctrl+Alt+N</kbd>
+                        </button>
                     </div>
                     <div>
-                        <button id="saveProjectButton" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm">Salvar Projeto</button>
+                        <button id="saveProjectButton" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm flex items-center justify-center gap-2">
+                            <span>Salvar Projeto</span>
+                            <kbd class="shortcut-key ml-0">Ctrl+S</kbd>
+                        </button>
                     </div>
                 </div>
             </details>
@@ -487,12 +473,14 @@
             <details open class="subsection-details">
                 <summary><h4 class="font-semibold text-gray-400 text-sm">Carregar Imagem</h4></summary>
                 <div class="subsection-content px-3 pt-2 pb-3 space-y-4">
-                    <div class="bg-gray-900/50 border border-dashed border-gray-600 rounded-xl p-4 text-center">
-                        <input type="file" id="imageLoader" accept="image/png, image/jpeg, image/bmp, image/tiff, image/tif" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 font-semibold file:bg-teal-500/80 file:text-white hover:file:bg-teal-600 cursor-pointer" multiple />
-                        <p class="text-xs text-gray-500 mt-2">Suporta PNG, JPG, BMP, TIF. Selecione múltiplos arquivos.</p>
-                    </div>
-                        <p id="fileNameDisplay" class="text-center text-sm text-teal-400 font-medium h-5 truncate" title=""></p>
-                        <div id="imageNavControls" class="hidden items-center justify-between gap-2">
+                    <label class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm text-center cursor-pointer block flex items-center justify-center gap-2">
+                        <span>Carregar Imagens</span>
+                        <kbd class="shortcut-key ml-0">Ctrl+O</kbd>
+                        <input type="file" id="imageLoader" accept="image/png, image/jpeg, image/bmp, image/tiff, image/tif" class="hidden" multiple />
+                    </label>
+                    <p class="text-xs text-gray-500 -mt-2 text-center">Ou arraste e solte os arquivos na tela.</p>
+                    <p id="fileNameDisplay" class="text-center text-sm text-teal-400 font-medium h-5 truncate" title=""></p>
+                    <div id="imageNavControls" class="hidden items-center justify-between gap-2">
                         <button id="prevImageButton" class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 px-3 rounded-lg transition-colors text-sm">&lt; Anterior</button>
                         <span id="imageNavStatus" class="text-sm font-medium text-gray-400 truncate" title=""></span>
                         <button id="nextImageButton" class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 px-3 rounded-lg transition-colors text-sm">Próximo &gt;</button>
@@ -507,22 +495,18 @@
             <ol id="workflow-stepper" class="flex items-center w-full mb-6">
                 <li class="workflow-step flex items-center" data-step="0">
                     <span class="step-indicator flex items-center justify-center font-bold">1</span>
-                    <span class="step-text">Preparação</span>
+                    <span class="step-text">Núcleo</span>
                 </li>
                 <li class="workflow-step flex items-center" data-step="1">
                     <span class="step-indicator flex items-center justify-center font-bold">2</span>
-                    <span class="step-text">Núcleo</span>
-                </li>
-                <li class="workflow-step flex items-center" data-step="2">
-                    <span class="step-indicator flex items-center justify-center font-bold">3</span>
                     <span class="step-text">Raios</span>
+                </li>
+                 <li class="workflow-step flex items-center" data-step="2">
+                    <span class="step-indicator flex items-center justify-center font-bold">3</span>
+                    <span class="step-text">Células</span>
                 </li>
                  <li class="workflow-step flex items-center" data-step="3">
                     <span class="step-indicator flex items-center justify-center font-bold">4</span>
-                    <span class="step-text">Células</span>
-                </li>
-                 <li class="workflow-step flex items-center" data-step="4">
-                    <span class="step-indicator flex items-center justify-center font-bold">5</span>
                     <span class="step-text">Borda</span>
                 </li>
             </ol>
@@ -532,11 +516,6 @@
             <!-- Step Content Container -->
             <div id="workflow-step-content-container">
                 <div class="step-content-item" data-step="0">
-                     <div class="grid grid-cols-1 gap-2">
-                        <button id="convertTo8BitButton" class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white font-bold py-2 px-3 rounded-lg w-full transition-colors text-sm flex items-center justify-center gap-2">Converter para 8-bit<span id="bitStatus" class="text-xs font-bold ml-auto px-2 py-0.5 rounded-full"></span></button>
-                    </div>
-                </div>
-                <div class="step-content-item" data-step="1">
                     <div class="space-y-3">
                         <div>
                             <p class="text-center text-xs font-semibold text-gray-400 mb-1">Núcleo do Esferoide</p>
@@ -559,7 +538,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="step-content-item" data-step="2">
+                <div class="step-content-item" data-step="1">
                     <div class="space-y-3">
                         <p class="text-center text-xs font-semibold text-gray-400 mb-1">Raios de Medição</p>
                         <div class="flex items-center gap-2">
@@ -574,7 +553,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="step-content-item" data-step="3">
+                <div class="step-content-item" data-step="2">
                     <div class="space-y-3">
                         <p class="text-center text-xs font-semibold text-gray-400 mb-1">Contagem de Células</p>
                         <div class="text-center p-2 bg-gray-800/50 rounded-md">
@@ -592,7 +571,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="step-content-item" data-step="4">
+                <div class="step-content-item" data-step="3">
                     <div class="space-y-3">
                          <p class="text-center text-xs font-semibold text-gray-400 mb-1">Borda de Migração</p>
                          <div class="grid grid-cols-2 gap-2">
@@ -609,6 +588,25 @@
         </div>
 
         <div id="adjustments-section">
+            <details open class="subsection-details">
+                <summary><h4 class="font-semibold text-gray-400 text-sm">Modo de Ajuste</h4></summary>
+                <div class="subsection-content px-3 pt-2 pb-3">
+                    <div class="flex flex-row items-stretch gap-1 p-1 bg-gray-800 rounded-lg">
+                        <div class="flex-1 hidden">
+                            <input type="radio" id="adjustment-mode-image" name="adjustment-scope" value="image" class="adjustment-scope-input">
+                            <label for="adjustment-mode-image" class="adjustment-scope-label block text-center text-xs font-semibold py-1.5 px-2 rounded-md cursor-pointer transition-colors">Imagem</label>
+                        </div>
+                        <div class="flex-1">
+                            <input type="radio" id="adjustment-mode-tab" name="adjustment-scope" value="tab" class="adjustment-scope-input" checked>
+                            <label for="adjustment-mode-tab" class="adjustment-scope-label block text-center text-xs font-semibold py-1.5 px-2 rounded-md cursor-pointer transition-colors">Aba</label>
+                        </div>
+                        <div class="flex-1">
+                            <input type="radio" id="adjustment-mode-global" name="adjustment-scope" value="global" class="adjustment-scope-input">
+                            <label for="adjustment-mode-global" class="adjustment-scope-label block text-center text-xs font-semibold py-1.5 px-2 rounded-md cursor-pointer transition-colors">Global</label>
+                        </div>
+                    </div>
+                </div>
+            </details>
             <details open class="subsection-details">
                 <summary><h4 class="font-semibold text-gray-400 text-sm">Ajustes de Cor e Tom</h4></summary>
                 <div class="subsection-content px-3 pt-2 pb-3 space-y-4">
@@ -781,6 +779,5 @@
     <canvas id="manualPaintCanvas"></canvas>
     
     <script type="module" src="index.tsx"></script>
-<script type="module" src="/index.tsx"></script>
 </body>
 </html>
