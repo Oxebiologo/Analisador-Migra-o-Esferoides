@@ -1,0 +1,7 @@
+
+Ajustes Importantes!
+
+Threshold: Ajuste entre 0.1-0.9 conforme o contraste da sua imagem
+Tamanho mínimo: Ajuste baseado no tamanho esperado das células
+Pré-processamento
+TensorFlow
